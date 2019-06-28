@@ -1,0 +1,37 @@
+{
+  "name": "shukra",
+  "version": "1.0.0",
+  "description": "Perform a Network Meta-Analysis (NMA)",
+  "main": "index.js",
+  "scripts": {
+    "test": "mocha"
+  },
+  "keywords": [
+    "NMA",
+    "network meta-analysis",
+    "meta-analysis",
+    "research synthesis",
+    "multi-arm",
+    "inferential modeling",
+    "inferential statistics",
+    "statistics"
+  ],
+  "author": "Karl Holub <karl.holub@nested-knowledge.com>",
+  "license": "GPL-2.0-or-later",
+  "dependencies": {
+    "distributions": "^2.0.0",
+    "ml-matrix": "^6.0.0"
+  },
+  "directories": {
+    "test": "test"
+  },
+  "devDependencies": {},
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/holub008/shukra.git"
+  },
+  "bugs": {
+    "url": "https://github.com/holub008/shukra/issues"
+  },
+  "homepage": "https://github.com/holub008/shukra#readme"
+}
