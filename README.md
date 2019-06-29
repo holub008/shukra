@@ -30,6 +30,11 @@ Network Meta-Analysis (NMA) in NodeJS
 ```
 
 ## Install
+Install the current release on [npm](https://www.npmjs.com/package/shukra):
+```bash
+npm install shukra
+```
+
 Install the most recent development version:
 ```bash
 npm install --save https://github.com/holub008/shukra/tarball/master
