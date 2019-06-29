@@ -5,6 +5,7 @@ Network Meta-Analysis (NMA) in NodeJS
 
 ```javascript
     const {fixedEffectsMeanDifferenceNMA} = require('shukra');
+
     const studies = [1, 1, 2, 2, 2, 3, 3];
     const trts = ['A', 'B', 'A', 'B', 'C', 'C', 'B'];
     const means = [8, 10, 7, 10.5, 10.5, 10, 11];
@@ -40,7 +41,9 @@ Network Meta-Analysis is a model for performing research synthesis. Given multi-
 
 NMA is exciting in that it models direct contrasts (i.e. head to head treatment comparisons in studies) *and* indirect evidence (i.e. using knowledge about A vs. B in one study and B vs. C in another to make inference on A vs. C).
 
-![network graph](/docs/images/ischemic_stroke_recanalization_network.jpeg?raw=true "Network Graph")
+<p align="center">
+  <img src="/docs/images/ischemic_stroke_recanalization_network.jpeg">
+</p>
 
 ## About Shukra
 Shukra is a web targetted NMA implementation. It was specifically designed with simplicity & speed in mind over flexibility (as in exploratory analyses); this means shukra can *fit* an NMA in the scope of a web request (<10 milliseconds) and convey highly interprettable results to end-users. 
@@ -50,4 +53,6 @@ The growing feature set currently offers:
   * Mean Difference (continuous outcomes) & Odds Ratios (binomial outcomes)
   * Inferential statistics on effect size estimates
 
-![shukra](docs/images/shukra.jpeg?raw=true "Shukra")
+<p align="center"> 
+  <img src="/docs/images/shukra.jpeg">
+</p>
