@@ -451,6 +451,10 @@ function fixedEffectsOddsRatioNMA(studies, treatments, positiveCounts, totalCoun
         }
     });
 
+    if (contrastStudies.length < 1) {
+        throw new Error('Cannot perform an NMA with no treatment contrasts!')
+    }
+
     const preprocessedData = _computePrerequisites(standardErrors, treatmentsA, treatmentsB, contrastStudies);
     const nmaData = _fixedEffectsNMA(effects, preprocessedData.standardErrors, preprocessedData.treatmentIndicesA,
         preprocessedData.treatmentIndicesB);

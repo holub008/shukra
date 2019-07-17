@@ -195,3 +195,16 @@ describe('Mean Difference FE NMA', function() {
     });
 
 });
+
+describe('Errors for degenerate inputs', function() {
+    const studies = [10, 11, 12];
+    const treatments = [1,2,1];
+    const positive = [10, 12, 15];
+    const total = [13, 20, 35];
+
+    // shukra is already generous in taking (and ignoring) single arm studies- but if 0 contrasts are available,
+    // absolutely nothing can be done
+    it('should throw if 0 contrasts are present', function() {
+        assert.throws(() => fixedEffectsOddsRatioNMA(studies, treatments, positive, total));
+    });
+});
