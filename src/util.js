@@ -7,10 +7,6 @@ function weightedMean(arr, weights) {
   return sum(arr.map((a, ix) => a * weights[ix])) / sum(weights);
 }
 
-function normalize(w) {
-
-}
-
 function cumSum(arr) {
   let runningSum = 0;
   const s = [0];
@@ -66,9 +62,9 @@ function weightedQuantile(x, w, ps) {
   });
 }
 
-function preconditionLengthEquality(left, right, leftName, rightName)  {
+function preconditionLengthEquality(left, right, leftName, rightName) {
   if (left.length !== right.length) {
-    throw new Error(`Array lengths are not equal (${leftName ? `${leftName}=`: ''}${left.length} vs. ${rightName ? `${rightName}=`: ''}${right.length})`);
+    throw new Error(`Array lengths are not equal (${leftName ? `${leftName}=` : ''}${left.length} vs. ${rightName ? `${rightName}=` : ''}${right.length})`);
   }
 }
 
@@ -79,9 +75,15 @@ function preconditionNotNull(arr, arrName) {
   }
 }
 
+function logistic(x) {
+  return 1 / (1 + Math.exp(x));
+}
+
 module.exports = {
   sum,
   weightedQuantile,
+  weightedMean,
+  logistic,
   preconditionLengthEquality,
   preconditionNotNull,
 };
