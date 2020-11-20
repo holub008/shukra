@@ -1,6 +1,11 @@
 const assert = require('assert');
-const {NetworkMetaAnalysis, fixedEffectsOddsRatioNMA, fixedEffectsMeanDifferenceNMA} = require('../../shukra');
-const { Matrix, inverse } = require('ml-matrix');
+const { NetworkMetaAnalysis, fixedEffectsOddsRatioNMA, fixedEffectsMeanDifferenceNMA } = require('../src/nma');
+const { pooledMedian, randomEffectsPooledMean, randomEffectsPooledRate } = require('../src/pooling');
+const { Matrix } = require('ml-matrix');
+
+/**
+ * tests for NMA module
+ */
 
 describe('NMA Holder Class', function() {
     const trt = new Matrix([[0, 5], [-5, 0]]);
@@ -208,3 +213,44 @@ describe('Errors for degenerate inputs', function() {
         assert.throws(() => fixedEffectsOddsRatioNMA(studies, treatments, positive, total));
     });
 });
+
+
+/**
+ * tests for pooling module
+ */
+/**
+describe('Random effects mean pooling', function() {
+    /**
+     * replicate in r with:
+     library(meta)
+     means <- c(10, 15, 20)
+     sds <- c(1, 2, 2.4)
+     ns <- c(1000, 50, 75)
+     mm <- metamean(ns, means, sds)
+
+     *//**
+    it('should produce correct results for full data', function() {
+        const means = [10, 15, 20];
+        const sds = [1, 2, 2.4];
+        const ns = [1000, 50, 75];
+        assert.throws(() => fixedEffectsOddsRatioNMA(studies, treatments, positive, total));
+    });
+
+    it('should produce correct results with missing sds', function() {
+        const means = [10, 15, 20];
+        const sds = [1, 2, 2.4];
+        const ns = [1000, 50, 75];
+        assert.throws(() => fixedEffectsOddsRatioNMA(studies, treatments, positive, total));
+    });
+});
+*/
+
+describe('Median Pooling', function() {
+    it('should produce correct results for full data', function() {
+        const medians = [10, 15, 17, 20, 16.5, 14];
+        const ns = [500, 500, 75, 400, 250, 300];
+        const estimates =  pooledMedian(ns, medians, .95);
+        console.log(estimates);
+        assert.ok(false);
+    });
+})

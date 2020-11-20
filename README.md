@@ -1,5 +1,5 @@
 # shukra
-Network Meta-Analysis (NMA) in NodeJS
+Tools for meta-analytical statistics,including Network Meta-Analysis (NMA), in NodeJS
 
 ## Example
 

@@ -1,10 +1,11 @@
 {
   "name": "shukra",
-  "version": "1.0.1",
-  "description": "Perform a Network Meta-Analysis (NMA)",
+  "version": "2.0.1",
+  "description": "Compute meta-analytical statistics",
   "main": "src/index.js",
   "scripts": {
-    "test": "mocha"
+    "test": "mocha",
+    "repl": "node"
   },
   "keywords": [
     "NMA",
@@ -14,9 +15,18 @@
     "multi-arm",
     "inferential modeling",
     "inferential statistics",
-    "statistics"
+    "fixed",
+    "mixed",
+    "statistics",
+    "pooling",
+    "pooled",
+    "effects",
+    "estimate",
+    "mean",
+    "median",
+    "standard deviation"
   ],
-  "author": "Karl Holub <karl.holub@nested-knowledge.com>",
+  "author": "Karl Holub <karljholub@gmail.com>",
   "license": "GPL-2.0-or-later",
   "dependencies": {
     "distributions": "^2.0.0",
