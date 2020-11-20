@@ -42,9 +42,9 @@ describe('NMA Holder Class', function () {
     // 2 * pnorm(0, 5, 2)
     assert.ok(inferentialStats.p > .0124 && inferentialStats.p < .0125);
     // qnorm(.975, 5, 2)
-    assert.ok(inferentialStats.upperBound > 8.91 && inferentialStats.upperBound < 8.92);
+    assert.ok(inferentialStats.upper > 8.91 && inferentialStats.upper < 8.92);
     // qnorm(.025, 5, 2)
-    assert.ok(inferentialStats.lowerBound > 1.08 && inferentialStats.lowerBound < 1.09);
+    assert.ok(inferentialStats.lower > 1.08 && inferentialStats.lower < 1.09);
   });
 
   it('should complain if you ask for a non-existent treatment', function () {
@@ -151,17 +151,17 @@ describe('Odds Ratio FE NMA', function () {
 
   it('should produce reasonable inferential statistics', function () {
     const cb = nma.computeInferentialStatistics("C", "B", .95);
-    assert.ok(cb.lowerBound > 1.20 && cb.lowerBound < 1.21);
-    assert.ok(cb.upperBound > 2.02 && cb.upperBound < 2.03);
+    assert.ok(cb.lower > 1.20 && cb.lower < 1.21);
+    assert.ok(cb.upper > 2.02 && cb.upper < 2.03);
     assert.ok(cb.p < .01);
 
     const ab = nma.computeInferentialStatistics("A", "B", .95);
-    assert.ok(ab.lowerBound > .635 && ab.lowerBound < .645);
-    assert.ok(ab.upperBound > 1.04 && ab.upperBound < 1.05);
+    assert.ok(ab.lower > .635 && ab.lower < .645);
+    assert.ok(ab.upper > 1.04 && ab.upper < 1.05);
     assert.ok(ab.p > .05);
 
     const ab99 = nma.computeInferentialStatistics("A", 'B', .99);
-    assert.ok(ab.lowerBound > ab99.lowerBound && ab.upperBound < ab99.upperBound);
+    assert.ok(ab.lower > ab99.lower && ab.upper < ab99.upper);
   });
 });
 
@@ -206,13 +206,13 @@ describe('Mean Difference FE NMA', function () {
 
   it('should produce reasonable inferential statistics', function () {
     const oneThree95 = nma.computeInferentialStatistics(1, 3, .95);
-    assert.ok(oneThree95.lowerBound > -4.095 && oneThree95.lowerBound < -4.09);
-    assert.ok(oneThree95.upperBound > -0.918 && oneThree95.upperBound < -0.917);
+    assert.ok(oneThree95.lower > -4.095 && oneThree95.lower < -4.09);
+    assert.ok(oneThree95.upper > -0.918 && oneThree95.upper < -0.917);
     assert.ok(oneThree95.p < .05);
 
     const twoThree95 = nma.computeInferentialStatistics(2, 3, .95);
-    assert.ok(twoThree95.lowerBound > -1.12 && twoThree95.lowerBound < -1.11);
-    assert.ok(twoThree95.upperBound > 1.735 && twoThree95.upperBound < 1.745);
+    assert.ok(twoThree95.lower > -1.12 && twoThree95.lower < -1.11);
+    assert.ok(twoThree95.upper > 1.735 && twoThree95.upper < 1.745);
     assert.ok(twoThree95.p > .05);
   });
 
@@ -235,6 +235,7 @@ describe('Errors for degenerate inputs', function () {
 /**
  * tests for pooling module
  * TODO: test for bad input
+ * TODO: test for study TEs
  */
 describe('Random effects mean pooling', function () {
   /*

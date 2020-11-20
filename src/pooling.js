@@ -43,7 +43,7 @@ function randomEffectsPooling(te, seTE) {
 }
 
 /**
- * Compute a pooled mean using a random effects model.
+ * Compute a pooled mean using inverse variance weighting & random effects.
  * Tau is computed via the DerSimonian-Laird estimator and confidence intervals are obtained through normal
  * approximations.
  *
@@ -79,8 +79,8 @@ function randomEffectsPooledMean(n, mean, sd, width=.95) {
     const studySE = seTE[ix];
     // if we were using an exact distribution (a Beta dist, I believe), we wouldn't need limits on these
     // regardless, these should only be triggered for small n0 or n1
-    const lower = Math.max(0, mean - studySE * z);
-    const upper = Math.min(1, mean + studySE * z);
+    const lower = m + studySE * z;
+    const upper = m - studySE * z;
     return {
       lower,
       estimate: m,
@@ -99,7 +99,7 @@ function randomEffectsPooledMean(n, mean, sd, width=.95) {
 }
 
 /**
- * Compute a pooled rate using a random effects model.
+ * Compute a pooled rate using a inverse variance pooling & random effects.
  * Tau is computed via the DerSimonian-Laird estimator and confidence intervals are obtained through normal
  * approximations. All computation is done on log odds, before transforming back to probabilities for the caller.
  *

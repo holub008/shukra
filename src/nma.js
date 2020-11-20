@@ -72,7 +72,7 @@ function _buildAllPairwiseContrasts(nTreatments) {
  * @param {Function} transformation a function applied to all treatment effects (e.g. for exponentiating log ORs)
  * @param {Number} width the width of confidence intervals (0-1)
  * @param {Number} nullEffect the effect size used as a null in (two sided) hypothesis testing
- * @return {{p: Number, upperBound: Number, lowerBound: Number}}
+ * @return {{p: Number, upper: Number, lower: Number}}
  * @private
  */
 function _computeInferentialStatistics(effect, standardError, transformation, width = .95, nullEffect = 0) {
@@ -84,8 +84,8 @@ function _computeInferentialStatistics(effect, standardError, transformation, wi
 
   return {
     p: p,
-    lowerBound: transformation(lowerBound),
-    upperBound: transformation(upperBound),
+    lower: transformation(lowerBound),
+    upper: transformation(upperBound),
   };
 }
 
@@ -126,7 +126,7 @@ class NetworkMetaAnalysis {
    * @param treatmentB
    * @param {Number} width specifies the width of intervals
    * @param {Number} nullEffect specifies basis of comparison for any hypothesis test (untransformed)
-   * @return {{p: Number, upperBound: Number, lowerBound: Number}}
+   * @return {{p: Number, upper: Number, lower: Number}}
    */
   computeInferentialStatistics(treatmentA, treatmentB, width, nullEffect = 0) {
     const i = this._treatments.indexOf(treatmentA);
