@@ -5,7 +5,7 @@ const { sum, preconditionNotNull, preconditionLengthEquality, weightedQuantile }
 const STD_NORMAL = distributions.Normal(0, 1);
 
 function crossProduct(A, B) {
-  return A.transpose().mul(B);
+  return A.transpose().mmul(B);
 }
 
 /**
@@ -19,14 +19,13 @@ function computeDLEstimator(te, se) {
   const X = Matrix.columnVector(se.map(() => 1));
   const Y = Matrix.columnVector(te);
 
-  const wVector = se.map((s) => 1 / s);
+  const wVector = se.map((s) => 1 / Math.pow(s, 2));
   const W = Matrix.diagonal(wVector);
   const stXWX = inverse(X.transpose().mmul(W).mmul(X));
-  const P = W - W.mmul(X).mmul(stXWX).mmul(crossProduct(X, W));
-  const RSS = crossProduct(Y, P).mul(Y);
+  const P = W.subtract(W.mmul(X).mmul(stXWX).mmul(crossProduct(X, W)));
+  const rss = crossProduct(Y, P).mmul(Y).get(0, 0);
   const trP = sum(P.diag());
-  const rssArr = RSS.getColumn(0);
-  return rssArr.map((res) => (res - (k - p)) / trP);
+  return (rss - (k - p)) / trP;
 }
 
 /**
@@ -66,7 +65,7 @@ function randomEffectsPooledRate(n, events, width=.95) {
       return [lower, upper];
     });
 
-    const tau2 = _computeDLEstimator()
+    const tau2 = computeDLEstimator()
     const w = seTE.map((se, ix) => 1 / (se^2) + tau2[ix]);
     const tePooled =
 }
