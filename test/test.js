@@ -1,7 +1,24 @@
 const assert = require('assert');
 const {NetworkMetaAnalysis, fixedEffectsOddsRatioNMA, fixedEffectsMeanDifferenceNMA} = require('../src/nma');
-const {pooledMedian, randomEffectsPooledMean, randomEffectsPooledRate} = require('../src/pooling');
+const {pooledMedian, randomEffectsPooledMean, randomEffectsPooledRate, pooledMean} = require('../src/pooling');
 const {Matrix} = require('ml-matrix');
+
+function within(real, expected, epsilon=.01) {
+  if ((isNaN(real) && !isNaN(expected)) || (!isNaN(real) && isNaN(expected))) {
+    console.log(`Found value ${real} and expected value ${expected} are not equal.`);
+    return false;
+  }
+
+  if (isNaN(real) &&  isNaN(expected))   {
+    return true;
+  }
+
+  const outside = Math.abs(real - expected) > epsilon;
+  if (outside) {
+    console.log(`Found value ${real} is not near expectation ${expected}`);
+  }
+  return !outside;
+}
 
 /**
  * tests for NMA module
@@ -217,40 +234,100 @@ describe('Errors for degenerate inputs', function () {
 
 /**
  * tests for pooling module
+ * TODO: test for bad input
  */
-/**
- describe('Random effects mean pooling', function() {
-    /**
- * replicate in r with:
-     library(meta)
-     means <- c(10, 15, 20)
-     sds <- c(1, 2, 2.4)
-     ns <- c(1000, 50, 75)
-     mm <- metamean(ns, means, sds)
+describe('Random effects mean pooling', function () {
+  /*
+   replicate expected estimates in r with:
+   library(meta)
+   means <- c(10, 15, 20)
+   sds <- c(1, 2, 2.4)
+   ns <- c(1000, 50, 75)
+   mm <- metamean(ns, means, sds)
+  */
+  it('should produce correct results for full data', function () {
+    const means = [10, 15, 20];
+    const sds = [1, 2, 2.4];
+    const ns = [1000, 50, 75];
+    const { estimate, lower, upper } = randomEffectsPooledMean(ns, means, sds);
+    assert.ok(within(estimate, 14.996));
+    assert.ok(within(lower, 8.643));
+    assert.ok(within(upper, 21.35));
+  });
 
- *//**
- it('should produce correct results for full data', function() {
-        const means = [10, 15, 20];
-        const sds = [1, 2, 2.4];
-        const ns = [1000, 50, 75];
-        assert.throws(() => fixedEffectsOddsRatioNMA(studies, treatments, positive, total));
-    });
+  /*
+   while we don't have a basis of comparison for imputation, we know the imputed sd is 1.7, so we can replicate
+    expected estimates in r with:
+   library(meta)
+   means <- c(10, 15, 20)
+   sds <- c(1, 1.7, 2.4)
+   ns <- c(1000, 50, 75)
+   mm <- metamean(ns, means, sds)
+  */
+  it('should produce correct results with missing sds', function () {
+    const means = [10, 15, 20];
+    const sds = [1, undefined, 2.4];
+    const ns = [1000, 50, 75];
+    const { estimate, lower, upper } = randomEffectsPooledMean(ns, means, sds);
+    assert.ok(within(estimate, 14.996));
+    assert.ok(within(lower, 8.955));
+    assert.ok(within(upper, 21.036));
+  });
+});
 
- it('should produce correct results with missing sds', function() {
-        const means = [10, 15, 20];
-        const sds = [1, 2, 2.4];
-        const ns = [1000, 50, 75];
-        assert.throws(() => fixedEffectsOddsRatioNMA(studies, treatments, positive, total));
-    });
- });
- */
+describe('Arithmetic mean pooling', function () {
+  it('should produce correct results for full data', function () {
+    const means = [10, 15, 20];
+    const ns = [10, 20, 100];
+    const { estimate } = pooledMean(ns, means);
+    assert.ok(within(estimate,18.461));
+  });
+});
+
+describe('Random effects rate pooling', function () {
+  /*
+    replicate expected estimates in r with:
+    library(meta)
+    events_p  <- c(10, 15, 20, 24, 25, 39, 10)
+    ns_p <- c(50, 65, 90,  100, 95, 150, 160)
+    mp_i <- metaprop(events_p, ns_p, method='Inverse')
+  */
+  it('should produce correct results for full data', function () {
+    const events = [10, 15, 20, 24, 25, 39, 10];
+    const ns = [50, 65, 90,  100, 95, 150, 160];
+    const { estimate, lower, upper } = randomEffectsPooledRate(ns, events);
+    assert.ok(within(estimate, .204));
+    assert.ok(within(lower, .15));
+    assert.ok(within(upper, .27));
+  });
+});
 
 describe('Median Pooling', function () {
-  it('should produce correct results for full data', function () {
+  /*
+    reproduce in R with the below. note we expect some leeway, since our quantile method differs
+    library(metamedian)
+    pool.med(c(10, 15, 17, 20, 16.5, 14), c(500, 500, 75, 400, 250, 300), TRUE, .95)
+   */
+  it('should produce correct results for toy data', function () {
     const medians = [10, 15, 17, 20, 16.5, 14];
     const ns = [500, 500, 75, 400, 250, 300];
-    const estimates = pooledMedian(ns, medians, .95);
-    console.log(estimates);
-    assert.ok(false);
+    const { estimate, lower, upper } = pooledMedian(ns, medians, .95);
+    assert.ok(within(estimate, 15, 1));
+    assert.ok(within(lower, 10, 1));
+    assert.ok(within(upper, 19.5, 1));
+  });
+
+  /*
+    reproduce in R with the below. note we expect some leeway, since our quantile method differs
+    library(metamedian)
+    pool.med(c(10, 15, 17, 20, 16.5, 14, 22, 23, 11, 17, 21), c(500, 500, 75, 400, 250, 300, 11, 300, 250, 200, 225), TRUE, .95)
+   */
+  it('should produce correct results for full data', function () {
+    const medians = [10, 15, 17, 20, 16.5, 14, 22, 23, 11, 17, 21];
+    const ns = [500, 500, 75, 400, 250, 300, 11, 300, 250, 200, 225];
+    const { estimate, lower, upper } = pooledMedian(ns, medians, .95);
+    assert.ok(within(estimate, 15, 1));
+    assert.ok(within(lower, 11, 1));
+    assert.ok(within(upper, 19.5, 1));
   });
 })

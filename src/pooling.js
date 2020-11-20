@@ -32,9 +32,10 @@ function computeDLEstimator(te, se) {
 function randomEffectsPooling(te, seTE) {
   const tau2 = computeDLEstimator(te, seTE);
   const w = seTE.map((se) => {
-    const denominator = (se^2 + tau2);
+    const denominator = (Math.pow(se, 2) + tau2);
     return denominator ? 1 / denominator : 0;
   });
+
   return {
     tePooled: weightedMean(te, w),
     seTEPooled: Math.sqrt(1 / sum(w)),
@@ -57,18 +58,21 @@ function randomEffectsPooling(te, seTE) {
  * @param width the desired width [0-1] of the CI on the pooled median estimate
  * @return an object with attributes `estimate` (pooled mean), `lower` (lower bound of pooled mean CI), `upper`, and `studyEstimates`
  */
-function randomEffectsPooledMean(n, mean, sd, width) {
+function randomEffectsPooledMean(n, mean, sd, width=.95) {
   preconditionNotNull(n, 'n');
   preconditionNotNull(mean, 'mean');
   // we DO allow sd to be null
   preconditionLengthEquality(n, mean, 'n', 'mean');
   preconditionLengthEquality(mean, sd, 'mean', 'sd');
 
-  const validSds = sd.filter(sd => sd || sd === 0);
+  const validSds = sd.filter((s) => s || s === 0);
+  if (!validSds.length && sd.length) {
+    throw new Error('Insufficient data for imputing missing SDs');
+  }
   const imputedSd = sum(validSds) / validSds.length;
   const sdImputed = sd.map(sd => sd || sd === 0 ? sd : imputedSd);
 
-  const seTE  = sdImputed.map((sdi) => Math.sqrt(Math.pow(sdi, 2) / n));
+  const seTE  = sdImputed.map((sdi, ix) => Math.sqrt(Math.pow(sdi, 2) / n[ix]));
 
   const z = STD_NORMAL.inv((1 - width) / 2)
   const studyTEs = mean.map((m, ix) => {
@@ -85,10 +89,11 @@ function randomEffectsPooledMean(n, mean, sd, width) {
   });
 
   const { tePooled, seTEPooled } = randomEffectsPooling(mean, seTE);
+
   return {
     estimate: tePooled,
-    lower: tePooled - z * seTEPooled,
-    upper: tePooled + z * seTEPooled,
+    lower: tePooled + z * seTEPooled,
+    upper: tePooled - z * seTEPooled,
     studyEstimates: studyTEs,
   };
 }
@@ -134,8 +139,8 @@ function randomEffectsPooledRate(n, events, width=.95) {
   // since all pooled estimates were computed on logits (log odds), we transform back to probability space
   return {
     estimate: logistic(tePooled),
-    lower: Math.max(0, logistic(tePooled - z * seTEPooled)),
-    upper: Math.min(1, logistic(tePooled + z * seTEPooled)),
+    lower: Math.max(0, logistic(tePooled + z * seTEPooled)),
+    upper: Math.min(1, logistic(tePooled - z * seTEPooled)),
     studyEstimates: studyTEs,
   };
 }
