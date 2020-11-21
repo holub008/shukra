@@ -63,12 +63,23 @@ function weightedQuantile(x, w, ps) {
 }
 
 function preconditionLengthEquality(left, right, leftName, rightName) {
+  if (!left) {
+    throw new Error(`Expected an array-like${leftName ? ` ${leftName}` : ''}`);
+  }
+  if (!right) {
+    throw new Error(`Expected an array-like${rightName ? ` ${rightName}` : ''}`);
+  }
+
   if (left.length !== right.length) {
     throw new Error(`Array lengths are not equal (${leftName ? `${leftName}=` : ''}${left.length} vs. ${rightName ? `${rightName}=` : ''}${right.length})`);
   }
 }
 
 function preconditionNotNull(arr, arrName) {
+  if (!arr) {
+    throw new Error(`Expected an array-like${arrName ? ` ${arrName}` : ''}`);
+  }
+
   const ix = arr.findIndex((x) => !x && x !== 0);
   if (ix >= 0) {
     throw new Error(`Element at index ${ix} is missing${arrName ? ` in ${arrName}` : ''}`);

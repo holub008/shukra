@@ -1,2 +1,7 @@
-export * from './nma.js';
-export * from './pooling';
+const nma = require('./nma.js');
+const pooling = require('./pooling');
+
+module.exports = {
+  ...nma,
+  ...pooling,
+};

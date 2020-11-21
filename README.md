@@ -4,7 +4,7 @@ Tools for meta-analytical statistics, including Network Meta-Analysis (NMA), in 
 ## Example
 An NMA on difference in means:
 ```javascript
-const {fixedEffectsMeanDifferenceNMA} = require('shukra/nma');
+const { fixedEffectsMeanDifferenceNMA } = require('shukra/nma');
 
 const studies = [1, 1, 2, 2, 2, 3, 3];
 const trts = ['A', 'B', 'A', 'B', 'C', 'C', 'B'];
@@ -31,7 +31,7 @@ nma.computeInferentialStatistics('A', 'B');
 Computing a pooled mean using inverse variance weighting:
 
 ```javascript
-const {randomEffectsPooledMean} = require('shukra');
+const { randomEffectsPooledMean } = require('shukra/pooling');
 randomEffectsPooledMean(ns, means, sds);
 /*
 {
