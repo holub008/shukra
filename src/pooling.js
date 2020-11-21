@@ -1,6 +1,6 @@
 const  distributions = require('distributions');
 const { Matrix, inverse } = require('ml-matrix');
-const { sum, preconditionNotNull, preconditionLengthEquality,
+const { sum, preconditionNotNull, preconditionLengthEquality, preconditionAllPositive, preconditionRange,
   weightedQuantile, weightedMean, logistic } = require('./util');
 
 const STD_NORMAL = distributions.Normal(0, 1);
@@ -56,14 +56,22 @@ function randomEffectsPooling(te, seTE) {
  * @param mean an array of the mean point estimates
  * @param sd an array of the standard deviations. note, entries may be undefined/null and will be imputed.
  * @param width the desired width [0-1] of the CI on the pooled median estimate
- * @return an object with attributes `estimate` (pooled mean), `lower` (lower bound of pooled mean CI), `upper`, and `studyEstimates`
+ * @return an object with attributes `estimate` (pooled mean), `lower` (lower bound of pooled mean CI), `upper`, and `studyEstimates`.
+ * if no point estimates are supplied, an empty object is returned
  */
 function randomEffectsPooledMean(n, mean, sd, width=.95) {
   preconditionNotNull(n, 'n');
   preconditionNotNull(mean, 'mean');
+  preconditionAllPositive(sd, 'sd');
+  preconditionAllPositive(n, 'n');
   // we DO allow sd to be null
   preconditionLengthEquality(n, mean, 'n', 'mean');
   preconditionLengthEquality(mean, sd, 'mean', 'sd');
+  preconditionRange(width, 0, 1, 'width');
+
+  if (!n.length) {
+    return {studyEstimates: []};
+  }
 
   const validSds = sd.filter((s) => s || s === 0);
   if (!validSds.length && sd.length) {
@@ -88,7 +96,17 @@ function randomEffectsPooledMean(n, mean, sd, width=.95) {
     };
   });
 
-  const { tePooled, seTEPooled } = randomEffectsPooling(mean, seTE);
+  let tePooled, seTEPooled;
+  if (mean.length > 1) {
+    const { tePooled: a, seTEPooled: b } = randomEffectsPooling(mean, seTE);
+    tePooled = a;
+    seTEPooled = b;
+  }
+  else {
+    // nothing to meta-analyze, just use the single point estimate
+    tePooled = mean[0];
+    seTEPooled = seTE[0];
+  }
 
   return {
     estimate: tePooled,
@@ -96,6 +114,14 @@ function randomEffectsPooledMean(n, mean, sd, width=.95) {
     upper: tePooled - z * seTEPooled,
     studyEstimates: studyTEs,
   };
+}
+
+function validateBinomial(events, n) {
+  events.forEach((eventCount, ix) => {
+    if (eventCount > n[ix]) {
+      throw new Error(`event is greater than n at index ${ix}`);
+    }
+  });
 }
 
 /**
@@ -111,7 +137,15 @@ function randomEffectsPooledMean(n, mean, sd, width=.95) {
 function randomEffectsPooledRate(n, events, width=.95) {
   preconditionNotNull(n, 'n');
   preconditionNotNull(events, 'events');
+  preconditionAllPositive(n, 'n', true);
+  preconditionAllPositive(events, 'n');
   preconditionLengthEquality(n, events, 'n', 'events');
+  preconditionRange(width, 0, 1, 'width');
+
+  if (!n.length) {
+    return {studyEstimates: []};
+  }
+  validateBinomial(events, n);
 
   // TODO, we may want an OR correction in the case of 0/1 probabilities (i think this is called an anscombe correction)
   // note we compute logits as the treatment effects
@@ -134,7 +168,17 @@ function randomEffectsPooledRate(n, events, width=.95) {
     };
   });
 
-  const { tePooled, seTEPooled } = randomEffectsPooling(te, seTE);
+  let tePooled, seTEPooled;
+  if (te.length > 1) {
+    const { tePooled: a, seTEPooled: b } = randomEffectsPooling(te, seTE);
+    tePooled = a;
+    seTEPooled = b;
+  }
+  else {
+    // nothing to meta-analyze, just use the single point estimate
+    tePooled = te[0];
+    seTEPooled = seTE[0];
+  }
 
   // since all pooled estimates were computed on logits (log odds), we transform back to probability space
   return {
@@ -154,7 +198,12 @@ function randomEffectsPooledRate(n, events, width=.95) {
 function pooledMean(n, mean) {
   preconditionNotNull(n, 'n');
   preconditionNotNull(mean, 'mean');
+  preconditionAllPositive(n, 'n');
   preconditionLengthEquality(n, mean, 'n',  'mean');
+
+  if (!n.length) {
+    return {};
+  }
 
   const summedN = sum(n);
   const summedValues = sum(mean.map((x, ix) => x * n[ix]));
@@ -179,7 +228,13 @@ function pooledMean(n, mean) {
 function pooledMedian(n, median, width=.95) {
   preconditionNotNull(n, 'n');
   preconditionNotNull(median, 'median');
+  preconditionAllPositive(n, 'n');
   preconditionLengthEquality(n, median, 'n',  'median');
+  preconditionRange(width, 0, 1, 'width');
+
+  if (!n.length) {
+    return {};
+  }
 
   const observations = median.length
   const quantile = Math.min(STD_NORMAL.inv(0.5 * width + 0.5) / (2 * Math.sqrt(observations)), .5);

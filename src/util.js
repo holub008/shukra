@@ -86,6 +86,20 @@ function preconditionNotNull(arr, arrName) {
   }
 }
 
+function preconditionAllPositive(arr, arrName, strictlyPositive=false) {
+  const ix = arr.findIndex((x) => (x || x === 0) && (strictlyPositive ? x <= 0 : x < 0));
+  if (ix >= 0) {
+    throw new Error(`Element at index ${ix} is non-positive${arrName ? ` in ${arrName}` : ''}`);
+  }
+}
+
+function preconditionRange(x, lower, upper, name) {
+  const inRange = x >= lower && x <= upper;
+  if (!inRange) {
+    throw new Error(`Value${name ? ` ${name}`: ''} not in range ${lower} to ${upper}`);
+  }
+}
+
 function logistic(x) {
   return 1 / (1 + Math.exp(-x));
 }
@@ -97,4 +111,6 @@ module.exports = {
   logistic,
   preconditionLengthEquality,
   preconditionNotNull,
+  preconditionAllPositive,
+  preconditionRange,
 };

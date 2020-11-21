@@ -218,7 +218,7 @@ describe('Mean Difference FE NMA', function () {
 
 });
 
-describe('Errors for degenerate inputs', function () {
+describe('NMA Errors for degenerate inputs', function () {
   const studies = [10, 11, 12];
   const treatments = [1, 2, 1];
   const positive = [10, 12, 15];
@@ -274,6 +274,79 @@ describe('Random effects mean pooling', function () {
     assert.ok(within(lower, 8.955));
     assert.ok(within(upper, 21.036));
   });
+
+  /*
+   library(meta)
+   means <- c(10, -5, 20)
+   sds <- c(1, 2, 2.4)
+   ns <- c(1000, 50, 75)
+   mm <- metamean(ns, means, sds)
+  */
+  it('should function properly with negative means', function() {
+    const means = [10, -5, 20];
+    const sds = [1, 2, 2.4];
+    const ns = [1000, 50, 75];
+    const { estimate, lower, upper } = randomEffectsPooledMean(ns, means, sds);
+    assert.ok(within(estimate, 8.3340));
+    assert.ok(within(lower, -1.9188));
+    assert.ok(within(upper, 18.5869));
+  });
+
+  /*
+   library(meta)
+   means <- c(10)
+   sds <- c(1)
+   ns <- c(1000)
+   mm <- metamean(ns, means, sds)
+  */
+  it('should handle a single point estimate', function() {
+    const means = [10];
+    const sds = [1];
+    const ns = [1000];
+    const { estimate, lower, upper } = randomEffectsPooledMean(ns, means, sds);
+    assert.ok(within(estimate, 10));
+    assert.ok(within(lower, 9.94));
+    assert.ok(within(upper, 10.06));
+  });
+
+  it('should handle no point estimates', function() {
+    const x = randomEffectsPooledMean([], [], []);
+    console.log(x);
+    assert.deepStrictEqual(x, {studyEstimates: []});
+  });
+
+  it('should throw on missing critical values', function() {
+    assert.throws(() => randomEffectsPooledMean([10, 20], [undefined, 100], [undefined, 5]),
+      {
+        message: 'Element at index 0 is missing in mean'
+      });
+
+    assert.throws(() => randomEffectsPooledMean([10, undefined], [110, 100], [undefined, 5]),
+      {
+        message: 'Element at index 1 is missing in n'
+      });
+  });
+
+  it('should throw on negative sd', function() {
+    assert.throws(() => randomEffectsPooledMean([10, 20], [95, 100], [-1, 5]),
+      {
+        message: 'Element at index 0 is non-positive in sd'
+      });
+  });
+
+  it('should throw on non-positive n', function() {
+    assert.throws(() => randomEffectsPooledMean([10, 20], [95, 100], [-1, 5]),
+      {
+        message: 'Element at index 0 is non-positive in sd'
+      });
+  });
+
+  it('should throw on invalid width', function() {
+    assert.throws(() => randomEffectsPooledMean([10, 20], [95, 100], [1, 5], 95),
+      {
+        message: 'Value width not in range 0 to 1'
+      });
+  });
 });
 
 describe('Arithmetic mean pooling', function () {
@@ -282,6 +355,29 @@ describe('Arithmetic mean pooling', function () {
     const ns = [10, 20, 100];
     const { estimate } = pooledMean(ns, means);
     assert.ok(within(estimate,18.461));
+  });
+
+
+  it('should throw on missing critical values', function() {
+    assert.throws(() => pooledMean([10, 20], [undefined, 100]),
+      {
+        message: 'Element at index 0 is missing in mean'
+      });
+
+    assert.throws(() => pooledMean([10, undefined], [110, 100]),
+      {
+        message: 'Element at index 1 is missing in n'
+      });
+  });
+
+  it('should handle no point estimates', function() {
+    const x = pooledMean([], []);
+    assert.deepStrictEqual(x, {});
+  });
+
+  it('should handle a single point estimate', function() {
+    const { estimate } = pooledMean([10], [50]);
+    assert.strictEqual(estimate, 50);
   });
 });
 
@@ -300,6 +396,72 @@ describe('Random effects rate pooling', function () {
     assert.ok(within(estimate, .204));
     assert.ok(within(lower, .15));
     assert.ok(within(upper, .27));
+  });
+
+  /*
+    library(meta)
+    events_p  <- c(50, 20, 10, 0)
+    ns_p <- c(100, 100, 50, 40)
+    mp_i <- metaprop(events_p, ns_p, method='Inverse')
+  */
+  it('should handle 0 event counts', function() {
+    const events = [50, 20, 10, 0];
+    const ns = [100, 100, 50, 40];
+    const { estimate, lower, upper } = randomEffectsPooledRate(ns, events);
+    assert.ok(within(estimate, .222));
+    assert.ok(within(lower, .090));
+    assert.ok(within(upper, .451));
+  });
+
+  /*
+    library(meta)
+    events_p  <- c(50)
+    ns_p <- c(100)
+    mp_i <- metaprop(events_p, ns_p, method='Inverse')
+  */
+  it('should handle a single point estimate', function() {
+    const { estimate, lower, upper} = randomEffectsPooledRate([100], [50]);
+    assert.ok(within(estimate, .5));
+    assert.ok(within(lower, .403));
+    assert.ok(within(upper, .597));
+  });
+
+  it('should handle no point estimates', function() {
+    const x = randomEffectsPooledRate([], []);
+    assert.deepStrictEqual(x, {studyEstimates: []})
+  });
+
+  it('should throw on missing critical values', function() {
+    assert.throws(() => randomEffectsPooledRate([10, 20], [5, undefined]),
+      {
+        message: 'Element at index 1 is missing in events',
+      });
+
+    assert.throws(() => randomEffectsPooledRate([10, undefined], [5, 10]),
+      {
+        message: 'Element at index 1 is missing in n',
+      });
+  });
+
+  it('should throw on event > n', function() {
+    assert.throws(() => randomEffectsPooledRate([10, 20], [9, 21]),
+      {
+        message: 'event is greater than n at index 1',
+      });
+  });
+
+  it('should throw on non-positive n', function() {
+    assert.throws(() => randomEffectsPooledRate([-10, 20], [-11, 9]),
+      {
+        message: 'Element at index 0 is non-positive in n',
+      });
+  });
+
+  it('should throw on 0 n', function() {
+    assert.throws(() => randomEffectsPooledRate([0, 20], [0, 9]),
+      {
+        message: 'Element at index 0 is non-positive in n',
+      });
   });
 });
 
@@ -330,5 +492,37 @@ describe('Median Pooling', function () {
     assert.ok(within(estimate, 15, 1));
     assert.ok(within(lower, 11, 1));
     assert.ok(within(upper, 19.5, 1));
+  });
+
+  it('should handle no point estimates', function() {
+    const x = pooledMedian([], []);
+    assert.deepStrictEqual(x, {});
+  });
+
+  it('should handle a single point estimate', function() {
+    const { estimate, lower, upper } = pooledMedian([100], [50]);
+    assert.ok(within(estimate, 50));
+    // this is obviously an incorrect estimate, but it's the functionality we'll go with for a degenerate input
+    assert.ok(within(lower, 50));
+    assert.ok(within(upper, 50));
+  });
+
+  it('should throw on missing critical values', function() {
+    assert.throws(() => pooledMedian([10, 20], [5, undefined]),
+      {
+        message: 'Element at index 1 is missing in median',
+      });
+
+    assert.throws(() => pooledMedian([10, undefined], [5, 10]),
+      {
+        message: 'Element at index 1 is missing in n',
+      });
+  });
+
+  it('should throw on non-positive n', function() {
+    assert.throws(() => pooledMedian([10, -10], [5, -15]),
+      {
+        message: 'Element at index 1 is non-positive in n',
+      });
   });
 })
