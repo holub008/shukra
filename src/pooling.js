@@ -147,10 +147,10 @@ function randomEffectsPooledRate(n, events, width=.95) {
   }
   validateBinomial(events, n);
 
-  // TODO, we may want an OR correction in the case of 0/1 probabilities (i think this is called an anscombe correction)
-  // note we compute logits as the treatment effects
-  const te = events.map((e, ix) => Math.log(e / (n[ix] - e)));
-  const seTE = events.map((e, ix) => Math.sqrt(1 / e + 1 / (n[ix] - e)));
+  // apply a small correction to cells with 0 events. i'm not sure what best practice is for this (add to event & n or just event)
+  // and `meta` gives option for either. I'll do both, which aligns with haldane-anscambe
+  const te = events.map((e, ix) => e ? Math.log(e / (n[ix] - e)) : Math.log(.5 / (n[ix])));
+  const seTE = events.map((e, ix) => e? Math.sqrt(1 / e + 1 / (n[ix] - e)) : Math.sqrt(1 / (e + .5) + (1 / (n[ix]))));
   // our reference `meta`, computes CIs using R's binom.test. that, in turn uses quantiles from the beta distribution
   // since that's a beast to compute, we opt for the simple normal approximation
   const z = STD_NORMAL.inv((1 - width) / 2);
@@ -159,8 +159,8 @@ function randomEffectsPooledRate(n, events, width=.95) {
     const studySE = Math.sqrt(pointEstimate * (1 - pointEstimate) / n[ix]);
     // if we were using an exact distribution (a Beta dist, I believe), we wouldn't need limits on these
     // regardless, these should only be triggered for small n0 or n1
-    const lower = Math.max(0, pointEstimate - studySE * z);
-    const upper = Math.min(1, pointEstimate + studySE * z);
+    const lower = Math.max(0, pointEstimate + studySE * z);
+    const upper = Math.min(1, pointEstimate - studySE * z);
     return {
       lower,
       estimate: pointEstimate,

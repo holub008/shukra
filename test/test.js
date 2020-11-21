@@ -234,8 +234,6 @@ describe('NMA Errors for degenerate inputs', function () {
 
 /**
  * tests for pooling module
- * TODO: test for bad input
- * TODO: test for study TEs
  */
 describe('Random effects mean pooling', function () {
   /*
@@ -250,10 +248,23 @@ describe('Random effects mean pooling', function () {
     const means = [10, 15, 20];
     const sds = [1, 2, 2.4];
     const ns = [1000, 50, 75];
-    const { estimate, lower, upper } = randomEffectsPooledMean(ns, means, sds);
+    const { estimate, lower, upper, studyEstimates } = randomEffectsPooledMean(ns, means, sds);
     assert.ok(within(estimate, 14.996));
     assert.ok(within(lower, 8.643));
     assert.ok(within(upper, 21.35));
+
+    assert.strictEqual(studyEstimates.length, 3);
+    assert.ok(within(studyEstimates[0].estimate, 10));
+    assert.ok(within(studyEstimates[0].lower, 9.938));
+    assert.ok(within(studyEstimates[0].upper, 10.062));
+
+    assert.ok(within(studyEstimates[1].estimate, 15));
+    assert.ok(within(studyEstimates[1].lower, 14.446));
+    assert.ok(within(studyEstimates[1].upper, 15.554));
+
+    assert.ok(within(studyEstimates[2].estimate, 20));
+    assert.ok(within(studyEstimates[2].lower, 19.457));
+    assert.ok(within(studyEstimates[2].upper, 20.543));
   });
 
   /*
@@ -269,10 +280,15 @@ describe('Random effects mean pooling', function () {
     const means = [10, 15, 20];
     const sds = [1, undefined, 2.4];
     const ns = [1000, 50, 75];
-    const { estimate, lower, upper } = randomEffectsPooledMean(ns, means, sds);
+    const { estimate, lower, upper, studyEstimates } = randomEffectsPooledMean(ns, means, sds);
     assert.ok(within(estimate, 14.996));
     assert.ok(within(lower, 8.955));
     assert.ok(within(upper, 21.036));
+
+    assert.strictEqual(studyEstimates.length, 3);
+    assert.ok(within(studyEstimates[1].estimate, 15));
+    assert.ok(within(studyEstimates[1].lower, 14.528));
+    assert.ok(within(studyEstimates[1].upper, 15.471));
   });
 
   /*
@@ -311,7 +327,6 @@ describe('Random effects mean pooling', function () {
 
   it('should handle no point estimates', function() {
     const x = randomEffectsPooledMean([], [], []);
-    console.log(x);
     assert.deepStrictEqual(x, {studyEstimates: []});
   });
 
@@ -392,10 +407,21 @@ describe('Random effects rate pooling', function () {
   it('should produce correct results for full data', function () {
     const events = [10, 15, 20, 24, 25, 39, 10];
     const ns = [50, 65, 90,  100, 95, 150, 160];
-    const { estimate, lower, upper } = randomEffectsPooledRate(ns, events);
+    const { estimate, lower, upper, studyEstimates } = randomEffectsPooledRate(ns, events);
     assert.ok(within(estimate, .204));
     assert.ok(within(lower, .15));
     assert.ok(within(upper, .27));
+
+    assert.strictEqual(studyEstimates.length, 7);
+    // note that since we are using a normal approximation over a beta, our CIs will be shifted left a bit more than is proper
+    // I believe that drives the difference ~1% differences in what `meta` is giving
+    assert.ok(within(studyEstimates[0].estimate, .2));
+    assert.ok(within(studyEstimates[0].lower, .09));
+    assert.ok(within(studyEstimates[0].upper, .31));
+
+    assert.ok(within(studyEstimates[6].estimate, .0625));
+    assert.ok(within(studyEstimates[6].lower, .0250));
+    assert.ok(within(studyEstimates[6].upper, .100));
   });
 
   /*
