@@ -29,14 +29,14 @@
   "author": "Karl Holub <karljholub@gmail.com>",
   "license": "GPL-2.0-or-later",
   "dependencies": {
-    "distributions": "^2.0.0",
-    "ml-matrix": "^6.0.0"
+    "distributions": "^2.1.0",
+    "ml-matrix": "^6.5.3"
   },
   "directories": {
     "test": "test"
   },
   "devDependencies": {
-    "mocha": "^6.1.4"
+    "mocha": "^6.2.3"
   },
   "repository": {
     "type": "git",

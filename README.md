@@ -15,17 +15,17 @@ const ns = [63, 45, 35, 44, 53, 75, 29];
 const nma = fixedEffectsMeanDifferenceNMA(studies, trts, means, sds, ns);
 
 nma.getEffect('A', 'B');
-/**
-  -2.819
+/*
+-2.819
  */
 
 nma.computeInferentialStatistics('A', 'B');
-/**
- {
-   p: 0.000008,
-   lowerBound: -4.06,
-   upperBound: -1.58
- }
+/*
+{
+  p: 0.000008,
+  lowerBound: -4.06,
+  upperBound: -1.58
+}
 */   
 ```
 Computing a pooled mean using inverse variance weighting:
@@ -45,7 +45,6 @@ randomEffectsPooledMean(ns, means, sds);
     ...
   ]
 }
-
 */
 ```
 
@@ -61,8 +60,8 @@ npm install --save https://github.com/holub008/shukra/tarball/master
 ```
 
 ## About Shukra
-Shukra is a web targeted meta-analytical statistics toolkit. It was specifically designed for simplicity & speed over 
- comprehensiveness (as in formal research publication); this means `shukra` can *fit* an NMA in the scope of a web request (<10 milliseconds). 
+`shukra` is a web targeted meta-analytical statistics toolkit. It was specifically designed for simplicity & speed over 
+ comprehensiveness (as in formal research publication); this means `shukra` can fit an NMA in the scope of a web request (<10 milliseconds). 
 
 The feature set is growing, but currently offers several modules:
 
@@ -82,7 +81,7 @@ The feature set is growing, but currently offers several modules:
 
 ## About NMA
 
-Network Meta-Analysis is a model for performing research synthesis. Given multi-arm (2+) studies, where each arm represents a discrete experimental treatment, and a measured outcome for each arm, an NMA produces a synthesized effect size and inferential statistics.
+Network Meta-Analysis is a model for performing research synthesis. Given multi-arm (2+) studies, where each arm represents a discrete experimental treatment, and a measured outcome for each arm, an NMA produces an effect size estimate and associated inferential statistics.
 
 NMA is exciting in that it models direct contrasts (i.e. head to head treatment comparisons in studies) *and* indirect evidence (i.e. using knowledge about A vs. B in one study and B vs. C in another to make inference on A vs. C).
 
