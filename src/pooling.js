@@ -149,8 +149,8 @@ function randomEffectsPooledRate(n, events, width=.95) {
 
   // apply a small correction to cells with 0 events. i'm not sure what best practice is for this (add to event & n or just event)
   // and `meta` gives option for either. I'll do both, which aligns with haldane-anscambe
-  const te = events.map((e, ix) => e ? Math.log(e / (n[ix] - e)) : Math.log(.5 / (n[ix])));
-  const seTE = events.map((e, ix) => e? Math.sqrt(1 / e + 1 / (n[ix] - e)) : Math.sqrt(1 / (e + .5) + (1 / (n[ix]))));
+  const te = events.map((e, ix) => e && e !== n[ix] ? Math.log(e / (n[ix] - e)) : Math.log((e + .5) / (n[ix] - e + .5)));
+  const seTE = events.map((e, ix) => e && e !== n[ix] ? Math.sqrt(1 / e + 1 / (n[ix] - e)) : Math.sqrt(1 / (e + .5) + (1 / (n[ix] - e + .5))));
   // our reference `meta`, computes CIs using R's binom.test. that, in turn uses quantiles from the beta distribution
   // since that's a beast to compute, we opt for the simple normal approximation
   const z = STD_NORMAL.inv((1 - width) / 2);

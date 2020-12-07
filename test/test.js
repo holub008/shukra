@@ -441,6 +441,21 @@ describe('Random effects rate pooling', function () {
 
   /*
     library(meta)
+    events_p  <- c(100, 85, 50, 30)
+    ns_p <- c(100, 100, 50, 40)
+    mp_i <- metaprop(events_p, ns_p, method='Inverse')
+  */
+  it('should handle event = total counts', function() {
+    const events = [100, 85, 50, 30];
+    const ns = [100, 100, 50, 40];
+    const { estimate, lower, upper } = randomEffectsPooledRate(ns, events);
+    assert.ok(within(estimate, .913));
+    assert.ok(within(lower, .756));
+    assert.ok(within(upper, .972));
+  });
+
+  /*
+    library(meta)
     events_p  <- c(50)
     ns_p <- c(100)
     mp_i <- metaprop(events_p, ns_p, method='Inverse')
