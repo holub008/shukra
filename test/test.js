@@ -467,6 +467,21 @@ describe('Random effects rate pooling', function () {
     assert.ok(within(upper, .597));
   });
 
+  /*
+  library(meta)
+  events_p  <- c(5, 1)
+  ns_p <- c(86, 24)
+  mp_i <- metaprop(events_p, ns_p, method='Inverse')
+
+  this test case is useful for asserting that we cap our tau^2 estimator at 0
+ */
+  it('should handle a small number of observations', function() {
+    const { estimate, lower, upper} = randomEffectsPooledRate([86, 24], [5, 1]);
+    assert.ok(within(estimate, .055));
+    assert.ok(within(lower, .0249));
+    assert.ok(within(upper, .117));
+  });
+
   it('should handle no point estimates', function() {
     const x = randomEffectsPooledRate([], []);
     assert.deepStrictEqual(x, {studyEstimates: []})

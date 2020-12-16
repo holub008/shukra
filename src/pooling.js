@@ -12,8 +12,10 @@ function crossProduct(A, B) {
 /**
  * computes the DerSimonian-Laird estimator of tau^2 (heterogeneity)
  * this routine is largely similar to what's implemented in metafor::rma.uni
+ *
+ * note minEstimator=0 is taken from rma.uni's default control settings (makes sense it must be at least non-negative)
  */
-function computeDLEstimator(te, se) {
+function computeDLEstimator(te, se, minEstimator=0) {
   const k = se.length;
   const p = 1; // this is the number of "moderators" (predictors in the regression). we hardcode to 1, for the intercept
   // no moderators, just an intercept
@@ -26,7 +28,7 @@ function computeDLEstimator(te, se) {
   const P = W.subtract(W.mmul(X).mmul(stXWX).mmul(crossProduct(X, W)));
   const rss = crossProduct(Y, P).mmul(Y).get(0, 0);
   const trP = sum(P.diag());
-  return (rss - (k - p)) / trP;
+  return Math.max((rss - (k - p)) / trP, minEstimator);
 }
 
 function randomEffectsPooling(te, seTE) {
