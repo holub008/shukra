@@ -185,6 +185,7 @@ describe('Odds Ratio FE NMA', function () {
       lower: 0.16335387790814926,
       upper: 0.7987415280874249,
       effect:  0.36121673003802274,
+      comparisonN: 280,
       treatment1: 'A',
       treatment2: 'C',
       study: 1
@@ -260,6 +261,7 @@ describe('Mean Difference FE NMA', function () {
       lower: -3.659706775608142,
       upper: -0.34029322439185816,
       effect: -2,
+      comparisonN: 108,
       treatment1: 1,
       treatment2: 2,
       study: 'A'
@@ -280,6 +282,7 @@ describe('Mean Difference FE NMA', function () {
         lower: -0.8461952912275792,
         upper: 2.846195291227579,
         effect: 1,
+        comparisonN: 104,
         treatment1: 2,
         treatment2: 3,
         study: 'C'
@@ -294,13 +297,14 @@ describe('Mean Difference FE NMA', function () {
     const effects2A = effects2.filter(({ study }) => study === 'A');
     assert.deepStrictEqual(effects2A.length, 1);
     assert.deepStrictEqual(effects2A[0],   {
-        p: 0.01818548988800539,
-        lower: 0.34029322439185816,
-        upper: 3.659706775608142,
-        effect: 2,
-        treatment1: 2,
-        treatment2: 1,
-        study: 'A'
+      p: 0.01818548988800539,
+      lower: 0.34029322439185816,
+      upper: 3.659706775608142,
+      effect: 2,
+      comparisonN: 108,
+      treatment1: 2,
+      treatment2: 1,
+      study: 'A',
       });
   });
 });

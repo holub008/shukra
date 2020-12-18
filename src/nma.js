@@ -97,7 +97,7 @@ class NetworkMetaAnalysis {
    * @param {Matrix} aggregatedTreatmentEffects a square matrix with treatment effects
    * @param {Matrix} aggregatedStandardErrors a square matrix with effect standard errors
    * @param {Array} orderedTreatments the list of unique treatments corresponding to row and column indices
-   * @param {Array} studyLevelEffects an array of objects with attributes `study`, `treatment1`, `treatment2`, `effect`, `se`
+   * @param {Array} studyLevelEffects an array of objects with attributes `study`, `treatment1`, `treatment2`, `effect`, `se`,  `comparisonN`
    * @param {Function} transformation a function applied to all treatment effects (e.g. if effects are on log scale)
    * @param {Function} inversion a function applied to treatment effects that must be changed in direction (e.g. if an effect is for A vs. B, inversion gives B vs. A)
    */
@@ -159,7 +159,7 @@ class NetworkMetaAnalysis {
    * get the (direct) effects and inferential statistics from individual studies feeding into the pooled estimates
    * inferentials are built on normal approximations
    * @param treatment the baseline used in treatment effect calculation
-   * @return {Array} study level effects. objects in the array will have `study`, `treatment1`, `treatment2`, `effect`, `lower`, `upper`, `p`
+   * @return {Array} study level effects. objects in the array will have `study`, `treatment1`, `treatment2`, `effect`, `lower`, `upper`, `p`, `comparisonN`
    */
   computeStudyLevelEffects(treatment, width=.95) {
     const directionalEffects = this._studyLevelEffects
@@ -182,7 +182,8 @@ class NetworkMetaAnalysis {
       inferentialStats.treatment1 = e.treatment1;
       inferentialStats.treatment2 = e.treatment2;
       inferentialStats.study = e.study;
-      return(inferentialStats);
+      inferentialStats.comparisonN = e.comparisonN;
+      return inferentialStats;
     });
   }
 }
@@ -379,6 +380,7 @@ function _buildAllPairsORStatistics(treatments, positiveCounts, totalCounts, inc
   const treatmentsB = new Array(nPairs);
   const logOddsRatios = new Array(nPairs);
   const logStandardErrors = new Array(nPairs);
+  const comparisonNs = new Array(nPairs);
   let ix = 0; // because the ix = f(i,j) arithmetic is no fun
   for (let i = 0; i < treatments.length - 1; i++) {
     for (let j = i + 1; j < treatments.length; j++) {
@@ -390,6 +392,7 @@ function _buildAllPairsORStatistics(treatments, positiveCounts, totalCounts, inc
       const nj = totalCounts[j] - positiveCounts[j] + incr;
       logOddsRatios[ix] = Math.log((pi / ni) / (pj / nj));
       logStandardErrors[ix] = Math.sqrt(1 / pi + 1 / ni + 1 / pj + 1 / nj);
+      comparisonNs[ix] = totalCounts[i] + totalCounts[j];
       ix += 1;
     }
   }
@@ -399,7 +402,8 @@ function _buildAllPairsORStatistics(treatments, positiveCounts, totalCounts, inc
     treatmentsB: treatmentsB,
     effects: logOddsRatios,
     standardErrors: logStandardErrors,
-  }
+    comparisonNs: comparisonNs,
+  };
 }
 
 /**
@@ -474,6 +478,7 @@ function fixedEffectsOddsRatioNMA(studies, treatments, positiveCounts, totalCoun
   const treatmentsB = [];
   const effects = [];
   const standardErrors = [];
+  const comparisonNs = [];
   const contrastStudies = [];
   uniqueStudies.forEach(s => {
     const studyIxs = studyIxTuples.filter(tup => tup[0] === s).map(tup => tup[1]);
@@ -486,6 +491,7 @@ function fixedEffectsOddsRatioNMA(studies, treatments, positiveCounts, totalCoun
     treatmentsB.push(...studyContrasts.treatmentsB);
     effects.push(...studyContrasts.effects);
     standardErrors.push(...studyContrasts.standardErrors);
+    comparisonNs.push(...studyContrasts.comparisonNs)
     for (let i = 0; i < studyContrasts.treatmentsA.length; i++) {
       contrastStudies.push(s);
     }
@@ -497,6 +503,7 @@ function fixedEffectsOddsRatioNMA(studies, treatments, positiveCounts, totalCoun
     treatment2: treatmentsB[ix],
     effect: effects[ix],
     se: standardErrors[ix],
+    comparisonN: comparisonNs[ix],
   }));
 
   if (contrastStudies.length < 1) {
@@ -537,6 +544,7 @@ function _buildAllPairsMeanDifferenceStatistics(treatments, means, standardDevia
   const treatmentsB = new Array(nPairs);
   const meanDifferences = new Array(nPairs);
   const standardErrors = new Array(nPairs);
+  const comparisonNs = new Array(nPairs);
 
   let ix = 0; // because the ix = f(i,j) arithmetic is no fun
   for (let i = 0; i < treatments.length - 1; i++) {
@@ -547,6 +555,7 @@ function _buildAllPairsMeanDifferenceStatistics(treatments, means, standardDevia
       meanDifferences[ix] = means[i] - means[j];
       standardErrors[ix] = Math.sqrt(Math.pow(standardDeviations[i], 2) / ns[i] +
         Math.pow(standardDeviations[j], 2) / ns[j]);
+      comparisonNs[ix] = ns[i] + ns[j];
 
       ix += 1;
     }
@@ -557,6 +566,7 @@ function _buildAllPairsMeanDifferenceStatistics(treatments, means, standardDevia
     treatmentsB: treatmentsB,
     effects: meanDifferences,
     standardErrors: standardErrors,
+    comparisonNs: comparisonNs,
   }
 }
 
@@ -583,6 +593,7 @@ function fixedEffectsMeanDifferenceNMA(studies, treatments, means, standardDevia
   const treatmentsB = [];
   const effects = [];
   const standardErrors = [];
+  const comparisonNs = [];
   const contrastStudies = [];
 
   uniqueStudies.forEach(s => {
@@ -598,6 +609,7 @@ function fixedEffectsMeanDifferenceNMA(studies, treatments, means, standardDevia
     treatmentsB.push(...studyContrasts.treatmentsB);
     effects.push(...studyContrasts.effects);
     standardErrors.push(...studyContrasts.standardErrors);
+    comparisonNs.push(...studyContrasts.comparisonNs);
     for (let i = 0; i < studyContrasts.treatmentsA.length; i++) {
       contrastStudies.push(s);
     }
@@ -609,6 +621,7 @@ function fixedEffectsMeanDifferenceNMA(studies, treatments, means, standardDevia
     treatment2: treatmentsB[ix],
     effect: effects[ix],
     se: standardErrors[ix],
+    comparisonN: comparisonNs[ix],
   }));
 
   const preprocessedData = _computePrerequisites(standardErrors, treatmentsA, treatmentsB, contrastStudies);
