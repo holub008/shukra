@@ -1,6 +1,6 @@
 {
   "name": "shukra",
-  "version": "2.0.3",
+  "version": "2.1.3",
   "description": "Compute meta-analytical statistics",
   "main": "src/index.js",
   "scripts": {
@@ -24,7 +24,8 @@
     "estimate",
     "mean",
     "median",
-    "standard deviation"
+    "standard deviation",
+    "odds ratio"
   ],
   "author": "Karl Holub <karljholub@gmail.com>",
   "license": "GPL-2.0-or-later",
