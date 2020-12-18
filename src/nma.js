@@ -97,13 +97,22 @@ class NetworkMetaAnalysis {
    * @param {Matrix} aggregatedTreatmentEffects a square matrix with treatment effects
    * @param {Matrix} aggregatedStandardErrors a square matrix with effect standard errors
    * @param {Array} orderedTreatments the list of unique treatments corresponding to row and column indices
+   * @param {Array} studyLevelEffects an array of objects with attributes `study`, `treatment1`, `treatment2`, `effect`, `se`
    * @param {Function} transformation a function applied to all treatment effects (e.g. if effects are on log scale)
+   * @param {Function} inversion a function applied to treatment effects that must be changed in direction (e.g. if an effect is for A vs. B, inversion gives B vs. A)
    */
-  constructor(aggregatedTreatmentEffects, aggregatedStandardErrors, orderedTreatments, transformation = x => x) {
+  constructor(aggregatedTreatmentEffects,
+              aggregatedStandardErrors,
+              orderedTreatments,
+              studyLevelEffects,
+              transformation = (x) => x,
+              inversion = (x) => -x) {
     this._treatmentEffects = aggregatedTreatmentEffects;
     this._standardErrors = aggregatedStandardErrors;
     this._treatments = orderedTreatments;
+    this._studyLevelEffects = studyLevelEffects;
     this._transformation = transformation;
+    this._inversion = inversion;
   }
 
   /**
@@ -144,6 +153,36 @@ class NetworkMetaAnalysis {
    */
   getTreatments() {
     return this._treatments.slice();
+  }
+
+  /**
+   * get the (direct) effects and inferential statistics from individual studies feeding into the pooled estimates
+   * inferentials are built on normal approximations
+   * @param treatment the baseline used in treatment effect calculation
+   * @return {Array} study level effects. objects in the array will have `study`, `treatment1`, `treatment2`, `effect`, `lower`, `upper`, `p`
+   */
+  computeStudyLevelEffects(treatment, width=.95) {
+    const directionalEffects = this._studyLevelEffects.filter(({treatment1}) => treatment1 === treatment);
+    const invertedEffects = this._studyLevelEffects
+      .filter(({treatment2}) => treatment2 === treatment)
+      .map((e)  => {
+        const eCopy = { ...e };
+        // since we're operating on standardized values, the inversion function is appropriately applied here
+        eCopy.effect = this._inversion(e.effect);
+        const trt1 = eCopy.treatment1;
+        eCopy.treatment1 = eCopy.treatment2;
+        eCopy.treatment2 = trt1;
+        return eCopy;
+      });
+
+    return [...directionalEffects, ...invertedEffects].map((e) => {
+      const inferentialStats = _computeInferentialStatistics(e.effect, e.se, this._transformation, width);
+      inferentialStats.effect = e.effect;
+      inferentialStats.treatment1 = e.treatment1;
+      inferentialStats.treatment2 = e.treatment2;
+      inferentialStats.study = e.study;
+      return(inferentialStats);
+    });
   }
 }
 
@@ -451,6 +490,14 @@ function fixedEffectsOddsRatioNMA(studies, treatments, positiveCounts, totalCoun
     }
   });
 
+  const studyLevelEffects = contrastStudies.map((s, ix) => ({
+    study: s,
+    treatment1: treatmentsA[ix],
+    treatment2: treatmentsB[ix],
+    effect: effects[ix],
+    se: standardErrors[ix],
+  }));
+
   if (contrastStudies.length < 1) {
     throw new Error('Cannot perform an NMA with no treatment contrasts!')
   }
@@ -460,7 +507,7 @@ function fixedEffectsOddsRatioNMA(studies, treatments, positiveCounts, totalCoun
     preprocessedData.treatmentIndicesB);
 
   return new NetworkMetaAnalysis(nmaData.aggregatedTreatmentEffects, nmaData.aggregatedStandardErrors,
-    preprocessedData.orderedTreatments, x => Math.exp(x));
+    preprocessedData.orderedTreatments, studyLevelEffects,x => Math.exp(x));
 }
 
 /**
@@ -555,12 +602,20 @@ function fixedEffectsMeanDifferenceNMA(studies, treatments, means, standardDevia
     }
   });
 
+  const studyLevelEffects = contrastStudies.map((s, ix) => ({
+    study: s,
+    treatment1: treatmentsA[ix],
+    treatment2: treatmentsB[ix],
+    effect: effects[ix],
+    se: standardErrors[ix],
+  }));
+
   const preprocessedData = _computePrerequisites(standardErrors, treatmentsA, treatmentsB, contrastStudies);
   const nmaData = _fixedEffectsNMA(effects, preprocessedData.standardErrors, preprocessedData.treatmentIndicesA,
     preprocessedData.treatmentIndicesB);
 
   return new NetworkMetaAnalysis(nmaData.aggregatedTreatmentEffects, nmaData.aggregatedStandardErrors,
-    preprocessedData.orderedTreatments);
+    preprocessedData.orderedTreatments, studyLevelEffects);
 }
 
 module.exports = {

@@ -28,7 +28,8 @@ describe('NMA Holder Class', function () {
   const trt = new Matrix([[0, 5], [-5, 0]]);
   const se = new Matrix([[0, 2], [2, 0]]);
   const trtLabel = ['Band-aid', 'Stitch'];
-  const meanDiffNMA = new NetworkMetaAnalysis(trt, se, trtLabel);
+  const stubStudyLevelEffects = [];
+  const meanDiffNMA = new NetworkMetaAnalysis(trt, se, trtLabel, stubStudyLevelEffects);
 
   it('should echo treatment effect', function () {
     assert.strictEqual(meanDiffNMA.getEffect('Band-aid', 'Stitch'), 5);
@@ -216,6 +217,66 @@ describe('Mean Difference FE NMA', function () {
     assert.ok(twoThree95.p > .05);
   });
 
+  it('should produce study level effects', function() {
+    const effects = nma.computeStudyLevelEffects(1);
+    assert.deepStrictEqual(effects.length, 3);
+
+    /* verify with R code:
+      se <- p$seTE[1]
+      effect <- p$TE[1] # -2
+      error <- qnorm(0.975)*se
+      c(effect - error, effect + error) # should match lower,upper
+     */
+    const effectsA = effects.filter(({ study }) => study === 'A');
+    assert.deepStrictEqual(effectsA.length, 1);
+    assert.deepStrictEqual(effectsA[0],   {
+      p: 0.01818548988800539,
+      lower: -3.659706775608142,
+      upper: -0.34029322439185816,
+      effect: -2,
+      treatment1: 1,
+      treatment2: 2,
+      study: 'A'
+    },);
+
+    const effects2 = nma.computeStudyLevelEffects(2);
+    assert.deepStrictEqual(effects2.length, 4);
+    /* verify with R code:
+      se <- p$seTE[5]
+      effect <- -p$TE[5] # we invert since netmeta uses 3 as the reference
+      error <- qnorm(0.975)*se
+      c(effect - error, effect + error) # should match lower,upper
+     */
+    const effects2C = effects2.filter(({ study }) => study === 'C');
+    assert.deepStrictEqual(effects2C.length, 1);
+    assert.deepStrictEqual(effects2C[0],   {
+        p: 0.2884067201816114,
+        lower: -0.8461952912275792,
+        upper: 2.846195291227579,
+        effect: 1,
+        treatment1: 2,
+        treatment2: 3,
+        study: 'C'
+      }
+    );
+    /* verify with R code:
+      se <- p$seTE[1]
+      effect <- -p$TE[1] # we invert since netmeta uses 3 as the reference
+      error <- qnorm(0.975)*se
+      c(effect - error, effect + error) # should match lower,upper
+     */
+    const effects2A = effects2.filter(({ study }) => study === 'A');
+    assert.deepStrictEqual(effects2A.length, 1);
+    assert.deepStrictEqual(effects2A[0],   {
+        p: 0.01818548988800539,
+        lower: 0.34029322439185816,
+        upper: 3.659706775608142,
+        effect: 2,
+        treatment1: 2,
+        treatment2: 1,
+        study: 'A'
+      });
+  });
 });
 
 describe('NMA Errors for degenerate inputs', function () {
