@@ -164,6 +164,32 @@ describe('Odds Ratio FE NMA', function () {
     const ab99 = nma.computeInferentialStatistics("A", 'B', .99);
     assert.ok(ab.lower > ab99.lower && ab.upper < ab99.upper);
   });
+
+  it('should produce study level effects', function() {
+    const effectsA = nma.computeStudyLevelEffects('A');
+    /*
+      sum(p2$treat1 == 'A')
+     */
+    assert.deepStrictEqual(effectsA.length, 20);
+    effectsA1C = effectsA.filter(({ study, treatment2 }) => study  === 1 && treatment2 === 'C');
+    assert.deepStrictEqual(effectsA1C.length, 1);
+    /*
+      effect <- exp(p2$TE[1]) # should match effect below (note these effects are anscambe corrected .5
+      log_effect <- p2$TE[1]
+      se <- p2$seTE[1]
+      error <- qnorm(0.975)*se
+      exp(c(log_effect - error, log_effect + error)) # should match lower,upper
+     */
+    assert.deepStrictEqual(effectsA1C[0], {
+      p: 0.01190387738868881,
+      lower: 0.16335387790814926,
+      upper: 0.7987415280874249,
+      effect:  0.36121673003802274,
+      treatment1: 'A',
+      treatment2: 'C',
+      study: 1
+    });
+  });
 });
 
 describe('Mean Difference FE NMA', function () {

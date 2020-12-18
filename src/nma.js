@@ -162,7 +162,8 @@ class NetworkMetaAnalysis {
    * @return {Array} study level effects. objects in the array will have `study`, `treatment1`, `treatment2`, `effect`, `lower`, `upper`, `p`
    */
   computeStudyLevelEffects(treatment, width=.95) {
-    const directionalEffects = this._studyLevelEffects.filter(({treatment1}) => treatment1 === treatment);
+    const directionalEffects = this._studyLevelEffects
+      .filter(({treatment1}) => treatment1 === treatment);
     const invertedEffects = this._studyLevelEffects
       .filter(({treatment2}) => treatment2 === treatment)
       .map((e)  => {
@@ -177,7 +178,7 @@ class NetworkMetaAnalysis {
 
     return [...directionalEffects, ...invertedEffects].map((e) => {
       const inferentialStats = _computeInferentialStatistics(e.effect, e.se, this._transformation, width);
-      inferentialStats.effect = e.effect;
+      inferentialStats.effect = this._transformation(e.effect); // with inferentials done, we convert to orig scale
       inferentialStats.treatment1 = e.treatment1;
       inferentialStats.treatment2 = e.treatment2;
       inferentialStats.study = e.study;
