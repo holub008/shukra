@@ -89,6 +89,10 @@ function _computeInferentialStatistics(effect, standardError, transformation, wi
   };
 }
 
+function coalesceNumeric(x) {
+  return Number.isNaN(x) ? 0 : x;
+}
+
 /**
  * a holder of the results of the NMA
  */
@@ -153,6 +157,39 @@ class NetworkMetaAnalysis {
    */
   getTreatments() {
     return this._treatments.slice();
+  }
+
+  /**
+   * compute SUCRA p-scores, implying a ranking of treatments
+   * @param smallerBetter {Boolean} indicates if a lower value in the compared statistic (eg OR, mean, etc.) is better
+   * @return {Array} an array of objects with attributes `treatment`, `pScore`. Sorted by pScore descending
+   */
+  computePScores(smallerBetter) {
+    const unsortedPscores = [];
+    for (let i = 0; i < this._treatments.length; i += 1) {
+      const ps = [];
+      for (let j = 0; j < this._treatments.length; j += 1) {
+        const te = this._treatmentEffects.get(i, j);
+        const se = this._standardErrors.get(i, j);
+        const weight = te === 0 ? .5 : te > 0 ? 1 : 0;
+        const { p: pValue } = _computeInferentialStatistics(te, se, this._transformation);
+        // convert a two sided p-value to a one-sided
+        if (smallerBetter) {
+          ps.push((weight * pValue / 2) + (1 - weight) * (1 - pValue / 2));
+        } else {
+          ps.push((weight * (1 - pValue / 2)) + (1 - weight) * (pValue / 2));
+        }
+      }
+      const presentCount = ps.filter((pScore) => !Number.isNaN(pScore)).length;
+      unsortedPscores.push(ps.reduce((a, b) => coalesceNumeric(a) + coalesceNumeric(b), 0) / presentCount);
+    }
+
+    const result = unsortedPscores.map((pScore, ix) => ({
+        treatment: this._treatments[ix],
+        pScore,
+      }));
+    result.sort((a, b) => b.pScore - a.pScore);
+    return result;
   }
 
   /**

@@ -307,6 +307,32 @@ describe('Mean Difference FE NMA', function () {
       study: 'A',
       });
   });
+
+  /* check with R code
+    netrank(net)
+    netrank(net, 'bad')
+   */
+  it('should produce valid SUCRA scores', function() {
+    const smallerBetterRanks = nma.computePScores(true)
+      .map((x) => {
+        x.pScore = Math.round(x.pScore * 10000) / 10000;
+        return x;
+      });
+    assert.deepStrictEqual(smallerBetterRanks, [
+      {
+        treatment: 1,
+        pScore: 0.9995,
+      },
+      {
+        treatment: 3,
+        pScore: 0.3336,
+      },
+      {
+        treatment: 2,
+        pScore: 0.1669,
+      },
+    ]);
+  })
 });
 
 describe('NMA Errors for degenerate inputs', function () {
