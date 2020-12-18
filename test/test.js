@@ -332,6 +332,26 @@ describe('Mean Difference FE NMA', function () {
         pScore: 0.1669,
       },
     ]);
+
+    const biggerBetterRanks = nma.computePScores(false)
+      .map((x) => {
+        x.pScore = Math.round(x.pScore * 10000) / 10000;
+        return x;
+      });
+    assert.deepStrictEqual(biggerBetterRanks, [
+      {
+        treatment: 2,
+        pScore: 0.8331,
+      },
+      {
+        treatment: 3,
+        pScore: 0.6664,
+      },
+      {
+        treatment: 1,
+        pScore: 0.0005,
+      },
+    ]);
   })
 });
 
@@ -347,6 +367,29 @@ describe('NMA Errors for degenerate inputs', function () {
     assert.throws(() => fixedEffectsOddsRatioNMA(studies, treatments, positive, total));
   });
 });
+
+/*
+describe('NMA for disconnected networks', function() {
+  const studies = ['A', 'A', 'B', 'B', 'C', 'C', 'D', 'D'];
+  const trts = [1, 2, 1, 2, 3, 4, 3, 4];
+  // the above defines a disconnected graph where A is only compared to B, and C to D
+  const means = [8, 10, 7, 10.5, 10.5, 10, 11, 10];
+  const sds = [4.923423, 3.867062, 3.250787, 6.349051, 6.664182, 4.324474, 4.301156, 5];
+  const ns = [63, 45, 35, 44, 53, 75, 29, 100];
+
+  const nma = fixedEffectsMeanDifferenceNMA(studies, trts, means, sds, ns);
+
+  it('should produce effect estimates at the connected components', function() {
+    console.log(nma._treatmentEffects)
+    console.log(nma._standardErrors)
+    assert.deepStrictEqual(nma.getEffect(1, 3), -1)
+  });
+
+  it('should give NaNs for non-overlapped treatments', function() {
+
+  });
+});
+*/
 
 
 /**

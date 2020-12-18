@@ -404,6 +404,83 @@ function _computePrerequisites(effectStandardErrors, treatmentsA, treatmentsB, s
 }
 
 /**
+ * throws an error of any treatment is not unique in a study
+ *
+ * @param {Array} studies
+ * @param {Array} treatments
+ * @private
+ */
+function _preconditionUniqueTreatments(studies, treatments) {
+  const uniqueStudies = new Set(studies);
+  uniqueStudies.forEach(study => {
+    const armIxs = studies
+      .map((s, ix) => [s, ix])
+      .filter(tup => tup[0] === study)
+      .map(tup => tup[1]);
+    const armTreatments = armIxs.map(ix => treatments[ix]);
+    if (armTreatments.length !== (new Set(armTreatments)).size) {
+      throw new Error(`For study '${study}', arm treatments (${armTreatments.join(',')}) are not unique, as required.`);
+    }
+  });
+}
+
+/**
+ *
+ * @param studies
+ * @param treatments
+ * @param buildConstrasts {Function} a function taking an array of treatments, and an object with array attributes corresponding to the attributes in supplied `parameters`. it should compute contrasts on a single study
+ * @param parameters {Object} }an object with array attributes to be consumed by `buildContrasts`. arrays should share length for correct indexing
+ * @param transformation {Function} maps effects computed in `buildContrasts` to a different space (typically one more interprettable)
+ * @return {NetworkMetaAnalysis}
+ */
+function generalizedNMA(studies, treatments, buildContrasts, parameters, transformation=(x) => x) {
+  const uniqueStudies = new Set(studies);
+  const studyIxTuples = studies.map((s, ix) => [s, ix]);
+
+  const treatmentsA = [];
+  const treatmentsB = [];
+  const effects = [];
+  const standardErrors = [];
+  const comparisonNs = [];
+  const contrastStudies = [];
+
+  uniqueStudies.forEach(s => {
+    const studyIxs = studyIxTuples.filter(tup => tup[0] === s).map(tup => tup[1]);
+    const studyTreatments = studyIxs.map((ix) => treatments[ix]);
+    const studyParameters = {};
+    Object.entries(parameters).forEach(([param, arr]) => {
+      studyParameters[param] = studyIxs.map((ix) => arr[ix]);
+    })
+
+    const studyContrasts = buildContrasts(studyTreatments, studyParameters);
+    treatmentsA.push(...studyContrasts.treatmentsA);
+    treatmentsB.push(...studyContrasts.treatmentsB);
+    effects.push(...studyContrasts.effects);
+    standardErrors.push(...studyContrasts.standardErrors);
+    comparisonNs.push(...studyContrasts.comparisonNs);
+    for (let i = 0; i < studyContrasts.treatmentsA.length; i++) {
+      contrastStudies.push(s);
+    }
+  });
+
+  const studyLevelEffects = contrastStudies.map((s, ix) => ({
+    study: s,
+    treatment1: treatmentsA[ix],
+    treatment2: treatmentsB[ix],
+    effect: effects[ix],
+    se: standardErrors[ix],
+    comparisonN: comparisonNs[ix],
+  }));
+
+  const preprocessedData = _computePrerequisites(standardErrors, treatmentsA, treatmentsB, contrastStudies);
+  const nmaData = _fixedEffectsNMA(effects, preprocessedData.standardErrors, preprocessedData.treatmentIndicesA,
+    preprocessedData.treatmentIndicesB);
+
+  return new NetworkMetaAnalysis(nmaData.aggregatedTreatmentEffects, nmaData.aggregatedStandardErrors,
+    preprocessedData.orderedTreatments, studyLevelEffects, transformation);
+}
+
+/**
  * note all ORs are log (base e) transformed to get a symmetric sampling distribution
  *
  * @param {Array} treatments condition applied to each study arm
@@ -411,7 +488,8 @@ function _computePrerequisites(effectStandardErrors, treatmentsA, treatmentsB, s
  * @param {Array<Number>} totalCounts total number of units in each study arm
  * @param {Number} incr Anscombe correction, added to all cells (regardless of zero counts) as a bias correction
  */
-function _buildAllPairsORStatistics(treatments, positiveCounts, totalCounts, incr = .5) {
+function _buildAllPairsORStatistics(treatments, params, incr = .5) {
+  const { positiveCounts, totalCounts } = params;
   const nPairs = treatments.length * (treatments.length - 1) / 2;
   const treatmentsA = new Array(nPairs);
   const treatmentsB = new Array(nPairs);
@@ -441,27 +519,6 @@ function _buildAllPairsORStatistics(treatments, positiveCounts, totalCounts, inc
     standardErrors: logStandardErrors,
     comparisonNs: comparisonNs,
   };
-}
-
-/**
- * throws an error of any treatment is not unique in a study
- *
- * @param {Array} studies
- * @param {Array} treatments
- * @private
- */
-function _preconditionUniqueTreatments(studies, treatments) {
-  const uniqueStudies = new Set(studies);
-  uniqueStudies.forEach(study => {
-    const armIxs = studies
-      .map((s, ix) => [s, ix])
-      .filter(tup => tup[0] === study)
-      .map(tup => tup[1]);
-    const armTreatments = armIxs.map(ix => treatments[ix]);
-    if (armTreatments.length !== (new Set(armTreatments)).size) {
-      throw new Error(`For study '${study}', arm treatments (${armTreatments.join(',')}) are not unique, as required.`);
-    }
-  });
 }
 
 /**
@@ -508,51 +565,10 @@ function _fixedEffectsORNMAPreconditions(studies, treatments, positiveCounts, to
 function fixedEffectsOddsRatioNMA(studies, treatments, positiveCounts, totalCounts) {
   _fixedEffectsORNMAPreconditions(studies, treatments, positiveCounts, totalCounts);
 
-  const uniqueStudies = new Set(studies);
-  const studyIxTuples = studies.map((s, ix) => [s, ix]);
-
-  const treatmentsA = [];
-  const treatmentsB = [];
-  const effects = [];
-  const standardErrors = [];
-  const comparisonNs = [];
-  const contrastStudies = [];
-  uniqueStudies.forEach(s => {
-    const studyIxs = studyIxTuples.filter(tup => tup[0] === s).map(tup => tup[1]);
-    const studyTreatments = studyIxs.map(ix => treatments[ix]);
-    const studyPositiveCounts = studyIxs.map(ix => positiveCounts[ix]);
-    const studyTotalCounts = studyIxs.map(ix => totalCounts[ix]);
-
-    const studyContrasts = _buildAllPairsORStatistics(studyTreatments, studyPositiveCounts, studyTotalCounts);
-    treatmentsA.push(...studyContrasts.treatmentsA);
-    treatmentsB.push(...studyContrasts.treatmentsB);
-    effects.push(...studyContrasts.effects);
-    standardErrors.push(...studyContrasts.standardErrors);
-    comparisonNs.push(...studyContrasts.comparisonNs)
-    for (let i = 0; i < studyContrasts.treatmentsA.length; i++) {
-      contrastStudies.push(s);
-    }
-  });
-
-  const studyLevelEffects = contrastStudies.map((s, ix) => ({
-    study: s,
-    treatment1: treatmentsA[ix],
-    treatment2: treatmentsB[ix],
-    effect: effects[ix],
-    se: standardErrors[ix],
-    comparisonN: comparisonNs[ix],
-  }));
-
-  if (contrastStudies.length < 1) {
-    throw new Error('Cannot perform an NMA with no treatment contrasts!')
-  }
-
-  const preprocessedData = _computePrerequisites(standardErrors, treatmentsA, treatmentsB, contrastStudies);
-  const nmaData = _fixedEffectsNMA(effects, preprocessedData.standardErrors, preprocessedData.treatmentIndicesA,
-    preprocessedData.treatmentIndicesB);
-
-  return new NetworkMetaAnalysis(nmaData.aggregatedTreatmentEffects, nmaData.aggregatedStandardErrors,
-    preprocessedData.orderedTreatments, studyLevelEffects,x => Math.exp(x));
+  return generalizedNMA(studies, treatments, _buildAllPairsORStatistics, {
+    positiveCounts,
+    totalCounts,
+  }, (x) => Math.exp(x));
 }
 
 /**
@@ -575,7 +591,8 @@ function _fixedEffectsMDNMAPreconditions(studies, treatments, means, standardDev
   _preconditionUniqueTreatments(studies, treatments);
 }
 
-function _buildAllPairsMeanDifferenceStatistics(treatments, means, standardDeviations, ns) {
+function _buildAllPairsMeanDifferenceStatistics(treatments, params) {
+  const { means, standardDeviations, ns } = params;
   const nPairs = treatments.length * (treatments.length - 1) / 2;
   const treatmentsA = new Array(nPairs);
   const treatmentsB = new Array(nPairs);
@@ -623,50 +640,11 @@ function _buildAllPairsMeanDifferenceStatistics(treatments, means, standardDevia
 function fixedEffectsMeanDifferenceNMA(studies, treatments, means, standardDeviations, experimentalUnits) {
   _fixedEffectsMDNMAPreconditions(studies, treatments, means, standardDeviations);
 
-  const uniqueStudies = new Set(studies);
-  const studyIxTuples = studies.map((s, ix) => [s, ix]);
-
-  const treatmentsA = [];
-  const treatmentsB = [];
-  const effects = [];
-  const standardErrors = [];
-  const comparisonNs = [];
-  const contrastStudies = [];
-
-  uniqueStudies.forEach(s => {
-    const studyIxs = studyIxTuples.filter(tup => tup[0] === s).map(tup => tup[1]);
-    const studyTreatments = studyIxs.map(ix => treatments[ix]);
-    const studyMeans = studyIxs.map(ix => means[ix]);
-    const studyStandardDeviations = studyIxs.map(ix => standardDeviations[ix]);
-    const studyN = studyIxs.map(ix => experimentalUnits[ix]);
-
-    const studyContrasts = _buildAllPairsMeanDifferenceStatistics(studyTreatments, studyMeans,
-      studyStandardDeviations, studyN);
-    treatmentsA.push(...studyContrasts.treatmentsA);
-    treatmentsB.push(...studyContrasts.treatmentsB);
-    effects.push(...studyContrasts.effects);
-    standardErrors.push(...studyContrasts.standardErrors);
-    comparisonNs.push(...studyContrasts.comparisonNs);
-    for (let i = 0; i < studyContrasts.treatmentsA.length; i++) {
-      contrastStudies.push(s);
-    }
+  return generalizedNMA(studies, treatments, _buildAllPairsMeanDifferenceStatistics, {
+    means,
+    standardDeviations,
+    ns: experimentalUnits,
   });
-
-  const studyLevelEffects = contrastStudies.map((s, ix) => ({
-    study: s,
-    treatment1: treatmentsA[ix],
-    treatment2: treatmentsB[ix],
-    effect: effects[ix],
-    se: standardErrors[ix],
-    comparisonN: comparisonNs[ix],
-  }));
-
-  const preprocessedData = _computePrerequisites(standardErrors, treatmentsA, treatmentsB, contrastStudies);
-  const nmaData = _fixedEffectsNMA(effects, preprocessedData.standardErrors, preprocessedData.treatmentIndicesA,
-    preprocessedData.treatmentIndicesB);
-
-  return new NetworkMetaAnalysis(nmaData.aggregatedTreatmentEffects, nmaData.aggregatedStandardErrors,
-    preprocessedData.orderedTreatments, studyLevelEffects);
 }
 
 module.exports = {

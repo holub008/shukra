@@ -1,0 +1,4 @@
+
+function getConnectedComponents(studies, treatments) {
+
+}
