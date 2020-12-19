@@ -1,5 +1,6 @@
 const {Matrix, inverse, pseudoInverse} = require('ml-matrix');
 const distributions = require('distributions');
+const {getConnectedComponents} = require('./graph');
 
 const STD_NORMAL = distributions.Normal(0, 1);
 
@@ -436,6 +437,8 @@ function _preconditionUniqueTreatments(studies, treatments) {
 function generalizedNMA(studies, treatments, buildContrasts, parameters, transformation=(x) => x) {
   const uniqueStudies = new Set(studies);
   const studyIxTuples = studies.map((s, ix) => [s, ix]);
+
+  //const components = getConnectedComponents(studies, treatments);
 
   const treatmentsA = [];
   const treatmentsB = [];
