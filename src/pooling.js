@@ -257,4 +257,4 @@ module.exports = {
   pooledMean: pooledMean,
   pooledMedian: pooledMedian,
   randomEffectsPooledRate: randomEffectsPooledRate,
-}
+};

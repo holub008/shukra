@@ -337,6 +337,54 @@ describe('Mean Difference FE NMA', function () {
   })
 });
 
+/*
+  data <- data.frame(
+    studlab = c(10, 10),
+    treat = c(1, 2),
+    positive = c(10, 12),
+    n = c(13, 20)
+  )
+
+  p <- with(data, pairwise(treat, event=positive, studlab = studlab, n=n))
+  net <- netmeta(p$TE, p$seTE, p$treat1, p$treat2, p$studlab, sm='MD', comb.fixed = TRUE, comb.random = FALSE)
+  summary(net)
+  netrank(net)
+ */
+describe('single study NMA', function() {
+  const studies = [10, 10];
+  const treatments = [1, 2];
+  const positive = [10, 12];
+  const total = [13, 20];
+
+  it('should produce valid effects', function() {
+    const nma = fixedEffectsOddsRatioNMA(studies, treatments, positive, total);
+    assert.deepStrictEqual(nma.getEffect(1, 2), (10.5 / 3.5) / (12.5 / 8.5));
+    assert.deepStrictEqual(nma.computeInferentialStatistics(1, 2, .95), {
+        p: 0.3486138799297245,
+        lower: 0.4593646265162551,
+        upper: 9.059469884655424
+      }
+    );
+    assert.deepStrictEqual(nma.computeStudyLevelEffects(1,.95), [
+        {
+          p: 0.34861387992972426,
+          lower: 0.4593646265162552,
+          upper: 9.059469884655424,
+          effect: 2.04,
+          treatment1: 1,
+          treatment2: 2,
+          study: 10,
+          comparisonN: 33
+        },
+      ]
+    );
+    assert.deepStrictEqual(nma.computePScores(true), [
+        { treatment: 2, pScore: 0.8256930600351378 },
+        { treatment: 1, pScore: 0.17430693996486224 }
+      ]);
+  });
+});
+
 describe('NMA Errors for degenerate inputs', function () {
   const studies = [10, 11, 12];
   const treatments = [1, 2, 1];
@@ -348,27 +396,93 @@ describe('NMA Errors for degenerate inputs', function () {
   it('should throw if 0 contrasts are present', function () {
     assert.throws(() => fixedEffectsOddsRatioNMA(studies, treatments, positive, total));
   });
+
+  it('should not allow an empty NMA', function() {
+    assert.throws(() => fixedEffectsMeanDifferenceNMA([], [], [], [], []),
+      {
+        message: 'Must have 1 or more studies to perform an NMA',
+      });
+  });
+
+  it('should not allow unequal parameter lengths', function() {
+    assert.throws(() => fixedEffectsMeanDifferenceNMA([1], [1], [1, 2], [1], [1]),
+      {
+        message: 'Studies (n=1), treatments (n=1), means (n=2), and standard deviations (n=1) do not have the same length, as required.',
+      }
+    );
+  })
 });
 
-/*
-describe('NMA for disconnected networks', function() {
+describe('NMA for networks with disconnected components', function() {
   const studies = ['A', 'A', 'B', 'B', 'C', 'C', 'D', 'D'];
   const trts = [1, 2, 1, 2, 3, 4, 3, 4];
-  // the above defines a disconnected graph where A is only compared to B, and C to D
+  // the above defines a disconnected graph where 1 is only compared to 2, and 3 to 4
   const means = [8, 10, 7, 10.5, 10.5, 10, 11, 10];
   const sds = [4.923423, 3.867062, 3.250787, 6.349051, 6.664182, 4.324474, 4.301156, 5];
   const ns = [63, 45, 35, 44, 53, 75, 29, 100];
 
   const nma = fixedEffectsMeanDifferenceNMA(studies, trts, means, sds, ns);
 
-  it('should produce effect estimates at the connected components', function() {
-    console.log(nma._treatmentEffects)
-    console.log(nma._standardErrors)
-    assert.deepStrictEqual(nma.getEffect(1, 3), -1)
+  it('should produce NaN effect estimates at isolated component contrasts', function() {
+    assert.deepStrictEqual(nma.getEffect(1, 3), NaN);
+    assert.deepStrictEqual(nma.computeInferentialStatistics(1, 3, .95), {
+      lower: Number.NaN,
+      upper: Number.NaN,
+      p: Number.NaN,
+    });
   });
 
-  it('should give NaNs for non-overlapped treatments', function() {
+  /*
+    # reproduce in R with:
+    data <- data.frame(
+      mean = c(8, 10, 7, 10.5),
+      sd = c(4.923423, 3.867062, 3.250787, 6.349051),
+      studlab = c('A', 'A', 'B', 'B'),
+      treat = c(1, 2, 1, 2),
+      n = c(63, 45, 35, 44)
+    )
 
+    p <- with(data, pairwise(treat, mean=mean, sd=sd, studlab = studlab, n=n))
+    net <- netmeta(p$TE, p$seTE, p$treat1, p$treat2, p$studlab, sm='MD', comb.fixed = TRUE, comb.random = FALSE)
+    summary(net)
+   */
+  it('should give valid effects for treatments in the same component', function() {
+    assert.deepStrictEqual(nma.getEffect(1, 2), -2.5558296023438998);
+    assert.deepStrictEqual(nma.computeInferentialStatistics(1, 2, .95), {
+      lower:  -3.872602646411969,
+      p: 0.00014223442580374446,
+      upper:  -1.2390565582758304,
+    });
+    // this is dubious math... since we have no evidence to do comparisons between e.g. 1 and 4, yet we rank them
+    assert.deepStrictEqual(nma.computePScores(true), [
+        { treatment: 1, pScore: 0.9999288827870981 },
+        { treatment: 4, pScore: 0.866255268796531 },
+        { treatment: 3, pScore: 0.13374473120346897 },
+        { treatment: 2, pScore: 0.00007111721290187223 }
+      ]);
+
+    assert.deepStrictEqual(nma.computeStudyLevelEffects(1), [
+        {
+          p: 0.01818548988800539,
+          lower: -3.659706775608142,
+          upper: -0.34029322439185816,
+          effect: -2,
+          treatment1: 1,
+          treatment2: 2,
+          study: 'A',
+          comparisonN: 108
+        },
+        {
+          p: 0.0015178470364287655,
+          lower: -5.663145441076081,
+          upper: -1.3368545589239198,
+          effect: -3.5,
+          treatment1: 1,
+          treatment2: 2,
+          study: 'B',
+          comparisonN: 79
+        }
+      ]
+    );
   });
 });
-*/

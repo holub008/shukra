@@ -327,8 +327,8 @@ function _fixedEffectsNMA(effects, standardErrors, treatmentIndicesA, treatmentI
 
   return {
     consistentContrastEffects: consistentContrastEffects,
-    aggregatedTreatmentEffects: aggregatedTreatmentEffects,
-    aggregatedStandardErrors: aggregatedStandardErrors,
+    treatmentEffects: aggregatedTreatmentEffects,
+    standardErrors: aggregatedStandardErrors,
   };
 }
 
@@ -425,6 +425,40 @@ function _preconditionUniqueTreatments(studies, treatments) {
   });
 }
 
+function _mergeComponentNMAResults(results) {
+  // preconditions will have guaranteed at least one component and therefore one result
+  let treatmentEffects = results[0].treatmentEffects;
+  let standardErrors = results[0].standardErrors;
+  let orderedTreatments = results[0].orderedTreatments;
+  let studyLevelEffects = results[0].studyLevelEffects;
+
+  results.slice(1).forEach((r) => {
+    orderedTreatments = orderedTreatments.concat(r.orderedTreatments);
+    studyLevelEffects = studyLevelEffects.concat(r.studyLevelEffects);
+
+    const newTreatmentEffects = Matrix.zeros(
+      treatmentEffects.rows + r.treatmentEffects.rows,
+      treatmentEffects.columns + r.treatmentEffects.columns).mul(Number.NaN);
+    newTreatmentEffects.setSubMatrix(treatmentEffects, 0, 0);
+    newTreatmentEffects.setSubMatrix(r.treatmentEffects, treatmentEffects.rows, treatmentEffects.columns);
+    treatmentEffects = newTreatmentEffects;
+
+    const newStandardErrors = Matrix.zeros(
+      standardErrors.rows + r.standardErrors.rows,
+      standardErrors.columns + r.standardErrors.columns);
+    newStandardErrors.setSubMatrix(standardErrors, 0, 0);
+    newStandardErrors.setSubMatrix(r.standardErrors, standardErrors.rows, standardErrors.columns);
+    standardErrors = newStandardErrors;
+  });
+
+  return {
+    treatmentEffects,
+    standardErrors,
+    orderedTreatments,
+    studyLevelEffects,
+  };
+}
+
 /**
  *
  * @param studies
@@ -434,53 +468,75 @@ function _preconditionUniqueTreatments(studies, treatments) {
  * @param transformation {Function} maps effects computed in `buildContrasts` to a different space (typically one more interprettable)
  * @return {NetworkMetaAnalysis}
  */
-function generalizedNMA(studies, treatments, buildContrasts, parameters, transformation=(x) => x) {
-  const uniqueStudies = new Set(studies);
+function _generalizedNMA(studies, treatments, buildContrasts, parameters, transformation=(x) => x) {
+  if (studies.length === 0) {
+    // https://github.com/mljs/matrix/issues/113 limits the API we can provide
+    throw new Error('Must have 1 or more studies to perform an NMA');
+  }
+
   const studyIxTuples = studies.map((s, ix) => [s, ix]);
 
-  //const components = getConnectedComponents(studies, treatments);
+  const components = getConnectedComponents(studies, treatments);
+  const componentResults = components.map((comp) => {
+    const componentIxs = [];
+    treatments.forEach((t, ix) => {
+      if (comp.indexOf(t) > -1) {
+        componentIxs.push(ix);
+      }
+    });
 
-  const treatmentsA = [];
-  const treatmentsB = [];
-  const effects = [];
-  const standardErrors = [];
-  const comparisonNs = [];
-  const contrastStudies = [];
+    const uniqueStudiesInComponent = [ ...(new Set(studyIxTuples
+      .filter(([s, ix]) => componentIxs.indexOf(ix) > -1)
+      .map(([s, ix]) => s))) ];
+    const treatmentsA = [];
+    const treatmentsB = [];
+    const effects = [];
+    const standardErrors = [];
+    const comparisonNs = [];
+    const contrastStudies = [];
 
-  uniqueStudies.forEach(s => {
-    const studyIxs = studyIxTuples.filter(tup => tup[0] === s).map(tup => tup[1]);
-    const studyTreatments = studyIxs.map((ix) => treatments[ix]);
-    const studyParameters = {};
-    Object.entries(parameters).forEach(([param, arr]) => {
-      studyParameters[param] = studyIxs.map((ix) => arr[ix]);
-    })
+    uniqueStudiesInComponent.map((s) => {
+      const studyIxs = studyIxTuples.filter(tup => tup[0] === s).map(tup => tup[1]);
+      const studyTreatments = studyIxs.map((ix) => treatments[ix]);
+      const studyParameters = {};
+      Object.entries(parameters).forEach(([param, arr]) => {
+        studyParameters[param] = studyIxs.map((ix) => arr[ix]);
+      })
 
-    const studyContrasts = buildContrasts(studyTreatments, studyParameters);
-    treatmentsA.push(...studyContrasts.treatmentsA);
-    treatmentsB.push(...studyContrasts.treatmentsB);
-    effects.push(...studyContrasts.effects);
-    standardErrors.push(...studyContrasts.standardErrors);
-    comparisonNs.push(...studyContrasts.comparisonNs);
-    for (let i = 0; i < studyContrasts.treatmentsA.length; i++) {
-      contrastStudies.push(s);
-    }
+      const studyContrasts = buildContrasts(studyTreatments, studyParameters);
+      treatmentsA.push(...studyContrasts.treatmentsA);
+      treatmentsB.push(...studyContrasts.treatmentsB);
+      effects.push(...studyContrasts.effects);
+      standardErrors.push(...studyContrasts.standardErrors);
+      comparisonNs.push(...studyContrasts.comparisonNs);
+      for (let i = 0; i < studyContrasts.treatmentsA.length; i++) {
+        contrastStudies.push(s);
+      }
+    });
+
+    const studyLevelEffects = contrastStudies.map((s, ix) => ({
+      study: s,
+      treatment1: treatmentsA[ix],
+      treatment2: treatmentsB[ix],
+      effect: effects[ix],
+      se: standardErrors[ix],
+      comparisonN: comparisonNs[ix],
+    }));
+
+    const preprocessedData = _computePrerequisites(standardErrors, treatmentsA, treatmentsB, contrastStudies);
+    const nmaData = _fixedEffectsNMA(effects, preprocessedData.standardErrors, preprocessedData.treatmentIndicesA,
+      preprocessedData.treatmentIndicesB);
+
+    return {
+      treatmentEffects:nmaData.treatmentEffects,
+      standardErrors: nmaData.standardErrors,
+      orderedTreatments: preprocessedData.orderedTreatments,
+      studyLevelEffects,
+    };
   });
 
-  const studyLevelEffects = contrastStudies.map((s, ix) => ({
-    study: s,
-    treatment1: treatmentsA[ix],
-    treatment2: treatmentsB[ix],
-    effect: effects[ix],
-    se: standardErrors[ix],
-    comparisonN: comparisonNs[ix],
-  }));
-
-  const preprocessedData = _computePrerequisites(standardErrors, treatmentsA, treatmentsB, contrastStudies);
-  const nmaData = _fixedEffectsNMA(effects, preprocessedData.standardErrors, preprocessedData.treatmentIndicesA,
-    preprocessedData.treatmentIndicesB);
-
-  return new NetworkMetaAnalysis(nmaData.aggregatedTreatmentEffects, nmaData.aggregatedStandardErrors,
-    preprocessedData.orderedTreatments, studyLevelEffects, transformation);
+  const { treatmentEffects, standardErrors, orderedTreatments, studyLevelEffects } = _mergeComponentNMAResults(componentResults);
+  return new NetworkMetaAnalysis(treatmentEffects, standardErrors, orderedTreatments, studyLevelEffects, transformation);
 }
 
 /**
@@ -568,7 +624,7 @@ function _fixedEffectsORNMAPreconditions(studies, treatments, positiveCounts, to
 function fixedEffectsOddsRatioNMA(studies, treatments, positiveCounts, totalCounts) {
   _fixedEffectsORNMAPreconditions(studies, treatments, positiveCounts, totalCounts);
 
-  return generalizedNMA(studies, treatments, _buildAllPairsORStatistics, {
+  return _generalizedNMA(studies, treatments, _buildAllPairsORStatistics, {
     positiveCounts,
     totalCounts,
   }, (x) => Math.exp(x));
@@ -643,7 +699,7 @@ function _buildAllPairsMeanDifferenceStatistics(treatments, params) {
 function fixedEffectsMeanDifferenceNMA(studies, treatments, means, standardDeviations, experimentalUnits) {
   _fixedEffectsMDNMAPreconditions(studies, treatments, means, standardDeviations);
 
-  return generalizedNMA(studies, treatments, _buildAllPairsMeanDifferenceStatistics, {
+  return _generalizedNMA(studies, treatments, _buildAllPairsMeanDifferenceStatistics, {
     means,
     standardDeviations,
     ns: experimentalUnits,
