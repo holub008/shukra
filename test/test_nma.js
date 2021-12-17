@@ -1,5 +1,5 @@
 const assert = require('assert');
-const {NetworkMetaAnalysis, fixedEffectsOddsRatioNMA, fixedEffectsMeanDifferenceNMA} = require('../src/nma');
+const {NetworkMetaAnalysis, oddsRatioNMA, meanDifferenceNMA} = require('../src/nma');
 const {Matrix} = require('ml-matrix');
 
 /**
@@ -47,20 +47,20 @@ describe('Odds Ratio FE NMA preconditions', function () {
   const totalCountGood = [140, 140, 138, 78, 85];
 
   it('succeeds with healthy data', function () {
-    const nma = fixedEffectsOddsRatioNMA(study, treatmentGood, positiveCountGood, totalCountGood);
+    const nma = oddsRatioNMA(study, treatmentGood, positiveCountGood, totalCountGood);
     assert.strictEqual(nma.getTreatments().length, 4);
   });
 
   it('should not produce a model for duplicate treatment arms', function () {
-    assert.throws(() => fixedEffectsOddsRatioNMA(study, treatmentBad, positiveCountGood, totalCountGood));
+    assert.throws(() => oddsRatioNMA(study, treatmentBad, positiveCountGood, totalCountGood));
   });
 
   it('should not produce a model for unequal input lengths', function () {
-    assert.throws(() => fixedEffectsOddsRatioNMA(study, treatmentGood, positiveCountGood, totalCountBad));
+    assert.throws(() => oddsRatioNMA(study, treatmentGood, positiveCountGood, totalCountBad));
   });
 
   it('should not produce a model for unequal input lengths', function () {
-    assert.throws(() => fixedEffectsOddsRatioNMA(study, treatmentGood, positiveCountBad, totalCountGood));
+    assert.throws(() => oddsRatioNMA(study, treatmentGood, positiveCountBad, totalCountGood));
   });
 });
 
@@ -110,7 +110,7 @@ describe('Odds Ratio FE NMA', function () {
   const study = [1, 1, 1, 2, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13, 14, 14,
     15, 15, 16, 16, 17, 17, 18, 18, 19, 19, 20, 20, 21, 21, 22, 22, 23, 23, 24, 24];
 
-  const nma = fixedEffectsOddsRatioNMA(study, treatment, positiveCount, totalCount);
+  const nma = oddsRatioNMA(study, treatment, positiveCount, totalCount);
 
   it('should produce reasonable effect size estimates', function () {
     /** checked via the following R code:
@@ -182,7 +182,7 @@ describe('Mean Difference FE NMA', function () {
   const sds = [4.923423, 3.867062, 3.250787, 6.349051, 6.664182, 4.324474, 4.301156];
   const ns = [63, 45, 35, 44, 53, 75, 29];
 
-  const nma = fixedEffectsMeanDifferenceNMA(studies, trts, means, sds, ns);
+  const nma = meanDifferenceNMA(studies, trts, means, sds, ns);
 
   it('should produce reasonable effect size estimates', function () {
     /** checked via the following R code
@@ -356,7 +356,7 @@ describe('single study NMA', function() {
   const total = [13, 20];
 
   it('should produce valid effects', function() {
-    const nma = fixedEffectsOddsRatioNMA(studies, treatments, positive, total);
+    const nma = oddsRatioNMA(studies, treatments, positive, total);
     assert.deepStrictEqual(nma.getEffect(1, 2), (10.5 / 3.5) / (12.5 / 8.5));
     assert.deepStrictEqual(nma.computeInferentialStatistics(1, 2, .95), {
         p: 0.3486138799297245,
@@ -393,18 +393,18 @@ describe('NMA Errors for degenerate inputs', function () {
   // shukra is already generous in taking (and ignoring) single arm studies- but if 0 contrasts are available,
   // absolutely nothing can be done
   it('should throw if 0 contrasts are present', function () {
-    assert.throws(() => fixedEffectsOddsRatioNMA(studies, treatments, positive, total));
+    assert.throws(() => oddsRatioNMA(studies, treatments, positive, total));
   });
 
   it('should not allow an empty NMA', function() {
-    assert.throws(() => fixedEffectsMeanDifferenceNMA([], [], [], [], []),
+    assert.throws(() => meanDifferenceNMA([], [], [], [], []),
       {
         message: 'Must have 1 or more studies to perform an NMA',
       });
   });
 
   it('should not allow unequal parameter lengths', function() {
-    assert.throws(() => fixedEffectsMeanDifferenceNMA([1], [1], [1, 2], [1], [1]),
+    assert.throws(() => meanDifferenceNMA([1], [1], [1, 2], [1], [1]),
       {
         message: 'Studies (n=1), treatments (n=1), means (n=2), and standard deviations (n=1) do not have the same length, as required.',
       }
@@ -420,7 +420,7 @@ describe('NMA for networks with disconnected components', function() {
   const sds = [4.923423, 3.867062, 3.250787, 6.349051, 6.664182, 4.324474, 4.301156, 5];
   const ns = [63, 45, 35, 44, 53, 75, 29, 100];
 
-  const nma = fixedEffectsMeanDifferenceNMA(studies, trts, means, sds, ns);
+  const nma = meanDifferenceNMA(studies, trts, means, sds, ns);
 
   it('should produce NaN effect estimates at isolated component contrasts', function() {
     assert.deepStrictEqual(nma.getEffect(1, 3), NaN);

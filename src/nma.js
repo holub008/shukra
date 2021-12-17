@@ -241,7 +241,7 @@ function _computeDF1(studies) {
 }
 
 /**
- * perform a fixed effect NMA
+ * perform an NMA from computed effects and SEs
  *
  * @param {Array<Number>} effects observed treatment effects
  * @param {Array<Number>} standardErrors standard errors of the treatments
@@ -263,7 +263,7 @@ function _NMA(effects, standardErrors, treatmentIndicesA, treatmentIndicesB, stu
   // number of unique treatments
   const nTreatments = _setUnion(treatmentIndicesA, treatmentIndicesB).size;
   // per-study weights
-  const W = Matrix.diagonal(standardErrors.map(se => 1 / (Math.pow(se, 2) + Math.pow(tau, 2)));
+  const W = Matrix.diagonal(standardErrors.map(se => 1 / (Math.pow(se, 2) + Math.pow(tau, 2))));
   // contrast matrices
   const BObserved = _buildObservedPairwiseContrasts(treatmentIndicesA, treatmentIndicesB);
 
@@ -352,13 +352,13 @@ function _NMA(effects, standardErrors, treatmentIndicesA, treatmentIndicesB, stu
   const I = Matrix.identity(m, m);
   const eMod = E.multiply(BObserved.mmul(BObserved.transpose()).get(0, 0)).divide(2);
   const computedTau2 = Q.subtract(df) / I.subtract(H).mmul(eMod).mmul(W);
-  const tau = Math.sqrt(Math.max(0, computedTau2));
+  const tauComputed = Math.sqrt(Math.max(0, computedTau2));
 
   return {
     consistentContrastEffects: consistentContrastEffects,
     treatmentEffects: aggregatedTreatmentEffects,
     standardErrors: aggregatedStandardErrors,
-    tau,
+    tau: tauComputed,
   };
 }
 
@@ -491,14 +491,15 @@ function _mergeComponentNMAResults(results) {
 
 /**
  *
- * @param studies
- * @param treatments
- * @param buildConstrasts {Function} a function taking an array of treatments, and an object with array attributes corresponding to the attributes in supplied `parameters`. it should compute contrasts on a single study
+ * @param studies {Array}
+ * @param treatments {Array}
+ * @param buildContrasts {Function} a function like _buildAllPairsORStatistics that generates pairs of arms implying treatment effects
  * @param parameters {Object} }an object with array attributes to be consumed by `buildContrasts`. arrays should share length for correct indexing
  * @param transformation {Function} maps effects computed in `buildContrasts` to a different space (typically one more interprettable)
+ * @param randomEffects {Boolean} whether or not random effects should be modeled
  * @return {NetworkMetaAnalysis}
  */
-function _generalizedNMA(studies, treatments, buildContrasts, parameters, transformation=(x) => x, randomEffects=false) {
+function _generalizedNMA(studies, treatments, buildContrasts, parameters, transformation, randomEffects=false) {
   if (studies.length === 0) {
     // https://github.com/mljs/matrix/issues/113 limits the API we can provide
     throw new Error('Must have 1 or more studies to perform an NMA');
@@ -626,7 +627,7 @@ function _buildAllPairsORStatistics(treatments, params, incr = .5) {
  * @param {Array<Number>} totalCounts
  * @private
  */
-function _fixedEffectsORNMAPreconditions(studies, treatments, positiveCounts, totalCounts) {
+function _ORNMAPreconditions(studies, treatments, positiveCounts, totalCounts) {
   if (studies.length !== treatments.length || studies.length !== positiveCounts.length ||
     studies.length !== totalCounts.length) {
     throw new Error(
@@ -644,10 +645,10 @@ function _fixedEffectsORNMAPreconditions(studies, treatments, positiveCounts, to
 }
 
 /**
- * Perform a fixed effects Network Meta-Analysis (NMA) on discrete, binomial outcomes, using an Odds Ratio (OR) as the
- * basis of comparison. Note that fixed effects models assume that all studies sample from the same effects
+ * Perform a Network Meta-Analysis (NMA) on discrete, binomial outcomes, using an Odds Ratio (OR) as the
+ * basis of comparison. Note that fixed effects models, default, assume that all studies sample from the same effects
  * distribution. This is often false in practice, due to different experimental designs, procedures, etc. However, fixed
- * effects can be desirable for their simplicity and increased power over alternatives (e.g. random effects).
+ * effects can be desirable in some cases for their simplicity and increased power over alternatives
  *
  * Input data is all array based (imagine arrays as columns of a table), with each "row" representing a study arm.
  *
@@ -655,15 +656,16 @@ function _fixedEffectsORNMAPreconditions(studies, treatments, positiveCounts, to
  * @param {Array} treatments the condition applied each arm of the study; can be any type, but must be unique
  * @param {Array<Number>} positiveCounts observed positive (numerator) outcomes in each study arm
  * @param {Array<Number>} totalCounts total number of units in each study arm
+ * @param {Boolean} randomEffects whether or not random effects should be modeled (using the DerSimonian-Laird estimator)
  * @return {NetworkMetaAnalysis}
  */
-function fixedEffectsOddsRatioNMA(studies, treatments, positiveCounts, totalCounts) {
-  _fixedEffectsORNMAPreconditions(studies, treatments, positiveCounts, totalCounts);
+function oddsRatioNMA(studies, treatments, positiveCounts, totalCounts, randomEffects=false) {
+  _ORNMAPreconditions(studies, treatments, positiveCounts, totalCounts);
 
   return _generalizedNMA(studies, treatments, _buildAllPairsORStatistics, {
     positiveCounts,
     totalCounts,
-  }, (x) => Math.exp(x));
+  }, (x) => Math.exp(x), randomEffects);
 }
 
 /**
@@ -676,7 +678,7 @@ function fixedEffectsOddsRatioNMA(studies, treatments, positiveCounts, totalCoun
  * @param {Array<Number>} standardDeviations
  * @private
  */
-function _fixedEffectsMDNMAPreconditions(studies, treatments, means, standardDeviations) {
+function _MDNMAPreconditions(studies, treatments, means, standardDeviations) {
   if (studies.length !== treatments.length || studies.length !== means.length ||
     studies.length !== standardDeviations.length) {
     throw new Error(
@@ -720,30 +722,31 @@ function _buildAllPairsMeanDifferenceStatistics(treatments, params) {
 }
 
 /**
- * Perform a fixed effects Network Meta-Analysis (NMA) on continuous outcomes, using a mean difference as the
- * basis of comparison. Note that fixed effects models assume that all studies sample from the same effects
+ * Perform a Network Meta-Analysis (NMA) on continuous outcomes, using a mean difference as the
+ * basis of comparison. Note that fixed effects models (default) assume that all studies sample from the same effects
  * distribution. This is often false in practice, due to different experimental designs, procedures, etc. However, fixed
- * effects can be desirable for their simplicity and increased power over alternatives (e.g. random effects).
+ * effects may be desirable for their simplicity and increased power over alternatives
  *
  * @param {Array} studies unique labels indicating the study an arm belongs to
  * @param {Array} treatments the condition applied each arm of the study; can be any type, but must be unique
  * @param {Array<Number>} means the measured mean of the outcome within the study arm
  * @param {Array<Number>} standardDeviations the measured standard deviation of the outcome within the study arm
  * @param {Array<Number>} experimentalUnits the number of units measured within the study arm
+ * @param {Boolean} randomEffects whether or not random effects should be modeled (using the DerSimonian-Laird estimator)
  * @return {NetworkMetaAnalysis}
  */
-function fixedEffectsMeanDifferenceNMA(studies, treatments, means, standardDeviations, experimentalUnits) {
-  _fixedEffectsMDNMAPreconditions(studies, treatments, means, standardDeviations);
+function meanDifferenceNMA(studies, treatments, means, standardDeviations, experimentalUnits, randomEffects=false) {
+  _MDNMAPreconditions(studies, treatments, means, standardDeviations);
 
   return _generalizedNMA(studies, treatments, _buildAllPairsMeanDifferenceStatistics, {
     means,
     standardDeviations,
     ns: experimentalUnits,
-  });
+  }, (x) => x, randomEffects);
 }
 
 module.exports = {
   NetworkMetaAnalysis,
-  fixedEffectsOddsRatioNMA: fixedEffectsOddsRatioNMA,
-  fixedEffectsMeanDifferenceNMA: fixedEffectsMeanDifferenceNMA,
+  oddsRatioNMA: oddsRatioNMA,
+  meanDifferenceNMA: meanDifferenceNMA,
 };
