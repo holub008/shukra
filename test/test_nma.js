@@ -1,6 +1,6 @@
 const assert = require('assert');
-const {NetworkMetaAnalysis, oddsRatioNMA, meanDifferenceNMA} = require('../src/nma');
-const {Matrix} = require('ml-matrix');
+const { NetworkMetaAnalysis, oddsRatioNMA, meanDifferenceNMA } = require('../src/nma');
+const { Matrix } = require('ml-matrix');
 
 /**
  * tests for NMA module
@@ -47,20 +47,20 @@ describe('Odds Ratio FE NMA preconditions', function () {
   const totalCountGood = [140, 140, 138, 78, 85];
 
   it('succeeds with healthy data', function () {
-    const nma = oddsRatioNMA(study, treatmentGood, positiveCountGood, totalCountGood);
+    const nma = oddsRatioNMA(study, treatmentGood, positiveCountGood, totalCountGood, false);
     assert.strictEqual(nma.getTreatments().length, 4);
   });
 
   it('should not produce a model for duplicate treatment arms', function () {
-    assert.throws(() => oddsRatioNMA(study, treatmentBad, positiveCountGood, totalCountGood));
+    assert.throws(() => oddsRatioNMA(study, treatmentBad, positiveCountGood, totalCountGood, false));
   });
 
   it('should not produce a model for unequal input lengths', function () {
-    assert.throws(() => oddsRatioNMA(study, treatmentGood, positiveCountGood, totalCountBad));
+    assert.throws(() => oddsRatioNMA(study, treatmentGood, positiveCountGood, totalCountBad, false));
   });
 
   it('should not produce a model for unequal input lengths', function () {
-    assert.throws(() => oddsRatioNMA(study, treatmentGood, positiveCountBad, totalCountGood));
+    assert.throws(() => oddsRatioNMA(study, treatmentGood, positiveCountBad, totalCountGood, false));
   });
 });
 
@@ -68,6 +68,7 @@ describe('Odds Ratio FE NMA', function () {
   // data originates from:
   // Dias S, Welton NJ, Sutton AJ, Caldwell DM, Lu G and Ades AE (2013): Evidence Synthesis for Decision Making 4: Inconsistency in networks of evidence based on randomized controlled trials. Medical Decision Making, 33, 641–56
   /** generated with R code:
+   data(smokingcessation)
    sc <- smokingcessation %>% mutate_at(c('treat1', 'treat2', 'treat3'), as.character)
    long<- lapply(1:nrow(sc), function(ix) {
               row <- sc[ix,]
@@ -110,49 +111,76 @@ describe('Odds Ratio FE NMA', function () {
   const study = [1, 1, 1, 2, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13, 14, 14,
     15, 15, 16, 16, 17, 17, 18, 18, 19, 19, 20, 20, 21, 21, 22, 22, 23, 23, 24, 24];
 
-  const nma = oddsRatioNMA(study, treatment, positiveCount, totalCount);
+  const nmaFE = oddsRatioNMA(study, treatment, positiveCount, totalCount, false);
+  const nmaRE = oddsRatioNMA(study, treatment, positiveCount, totalCount, true);
 
-  it('should produce reasonable effect size estimates', function () {
+
+  it('should produce reasonable fixed effects effect size estimates', function () {
     /** checked via the following R code:
      p2 <- pairwise(treat = list(treat1, treat2, treat3), event = list(event1, event2, event3),
      n = list(n1, n2, n3), data = smokingcessation, sm = "OR", addincr=TRUE)
      net2 <- netmeta(TE, seTE, treat1, treat2, studlab, data = p2, comb.fixed = TRUE, comb.random = FALSE)
      summary(net2)
      */
-    const ab = nma.getEffect("A", "B");
-    const ba = nma.getEffect("B", "A");
+    const ab = nmaFE.getEffect("A", "B");
+    const ba = nmaFE.getEffect("B", "A");
     assert.ok(ab > .81 && ab < .82);
     assert.ok(ba > 1.22 && ba < 1.23);
 
-    const aa = nma.getEffect("A", "A");
+    const aa = nmaFE.getEffect("A", "A");
     assert.ok(Math.abs(aa - 1) < .00001);
 
-    const db = nma.getEffect("D", "B");
+    const db = nmaFE.getEffect("D", "B");
     assert.ok(db > 1.64 && db < 1.65);
   });
 
-  it('should produce reasonable inferential statistics', function () {
-    const cb = nma.computeInferentialStatistics("C", "B", .95);
+  it('should produce reasonable random effects effect size estimates', function () {
+    /** checked via the following R code:
+     net2 <- netmeta(TE, seTE, treat1, treat2, studlab, data = p2, comb.fixed = FALSE, comb.random = TRUE)
+     summary(net2)
+     */
+    const ab = nmaRE.getEffect("A", "B");
+    const ba = nmaRE.getEffect("B", "A");
+
+    assert.ok(ba > 1.50 && ba < 1.51);
+    assert.ok(ab > 0.66 && ab < 0.67);
+
+    const aa = nmaRE.getEffect("A", "A");
+    assert.ok(Math.abs(aa - 1) < .00001);
+
+    const db = nmaRE.getEffect("D", "B");
+    assert.ok(db > 1.595 && db < 1.605);
+  });
+
+  it('should produce reasonable fixed effects inferential statistics', function () {
+    const cb = nmaFE.computeInferentialStatistics("C", "B", .95);
     assert.ok(cb.lower > 1.20 && cb.lower < 1.21);
     assert.ok(cb.upper > 2.02 && cb.upper < 2.03);
     assert.ok(cb.p < .01);
 
-    const ab = nma.computeInferentialStatistics("A", "B", .95);
+    const ab = nmaFE.computeInferentialStatistics("A", "B", .95);
     assert.ok(ab.lower > .635 && ab.lower < .645);
     assert.ok(ab.upper > 1.04 && ab.upper < 1.05);
     assert.ok(ab.p > .05);
 
-    const ab99 = nma.computeInferentialStatistics("A", 'B', .99);
+    const ab99 = nmaFE.computeInferentialStatistics("A", 'B', .99);
     assert.ok(ab.lower > ab99.lower && ab.upper < ab99.upper);
   });
 
+  it('should produce reasonable random effects inferential statistics', function () {
+    const ba = nmaRE.computeInferentialStatistics("B", "A", .95);
+    assert.ok(ba.lower > 0.73 && ba.lower < 0.74);
+    assert.ok(ba.upper > 3.06 && ba.upper < 3.07);
+    assert.ok(ba.p < 0.28 && ba.p > 0.25);
+  });
+
   it('should produce study level effects', function() {
-    const effectsA = nma.computeStudyLevelEffects('A');
+    const effectsA = nmaFE.computeStudyLevelEffects('A');
     /*
       sum(p2$treat1 == 'A')
      */
     assert.deepStrictEqual(effectsA.length, 20);
-    effectsA1C = effectsA.filter(({ study, treatment2 }) => study  === 1 && treatment2 === 'C');
+    const effectsA1C = effectsA.filter(({ study, treatment2 }) => study  === 1 && treatment2 === 'C');
     assert.deepStrictEqual(effectsA1C.length, 1);
     /*
       effect <- exp(p2$TE[1]) # should match effect below (note these effects are anscambe corrected .5
@@ -182,7 +210,7 @@ describe('Mean Difference NMA', function () {
   const sds = [4.923423, 3.867062, 3.250787, 6.349051, 6.664182, 4.324474, 4.301156];
   const ns = [63, 45, 35, 44, 53, 75, 29];
 
-  const nmaFE = meanDifferenceNMA(studies, trts, means, sds, ns);
+  const nmaFE = meanDifferenceNMA(studies, trts, means, sds, ns, false);
   const nmaRE = meanDifferenceNMA(studies, trts, means, sds, ns, true);
 
   it('should produce reasonable fixed effects effect size estimates', function () {
@@ -384,7 +412,7 @@ describe('single study NMA', function() {
   const total = [13, 20];
 
   it('should produce valid effects', function() {
-    const nma = oddsRatioNMA(studies, treatments, positive, total);
+    const nma = oddsRatioNMA(studies, treatments, positive, total, false);
     assert.deepStrictEqual(nma.getEffect(1, 2), (10.5 / 3.5) / (12.5 / 8.5));
     assert.deepStrictEqual(nma.computeInferentialStatistics(1, 2, .95), {
         p: 0.3486138799297245,
@@ -421,7 +449,7 @@ describe('NMA Errors for degenerate inputs', function () {
   // shukra is already generous in taking (and ignoring) single arm studies- but if 0 contrasts are available,
   // absolutely nothing can be done
   it('should throw if 0 contrasts are present', function () {
-    assert.throws(() => oddsRatioNMA(studies, treatments, positive, total));
+    assert.throws(() => oddsRatioNMA(studies, treatments, positive, total, false));
   });
 
   it('should not allow an empty NMA', function() {
@@ -448,7 +476,7 @@ describe('NMA for networks with disconnected components', function() {
   const sds = [4.923423, 3.867062, 3.250787, 6.349051, 6.664182, 4.324474, 4.301156, 5];
   const ns = [63, 45, 35, 44, 53, 75, 29, 100];
 
-  const nma = meanDifferenceNMA(studies, trts, means, sds, ns);
+  const nma = meanDifferenceNMA(studies, trts, means, sds, ns, false);
 
   it('should produce NaN effect estimates at isolated component contrasts', function() {
     assert.deepStrictEqual(nma.getEffect(1, 3), NaN);

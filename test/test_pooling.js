@@ -26,6 +26,8 @@ describe('Random effects mean pooling', function () {
    sds <- c(1, 2, 2.4)
    ns <- c(1000, 50, 75)
    mm <- metamean(ns, means, sds)
+
+   mmf <- metamean(ns, means, sds, random=FALSE)
   */
   it('should produce correct results for full data', function () {
     const means = [10, 15, 20];
@@ -48,6 +50,11 @@ describe('Random effects mean pooling', function () {
     assert.ok(within(studyEstimates[2].estimate, 20));
     assert.ok(within(studyEstimates[2].lower, 19.457));
     assert.ok(within(studyEstimates[2].upper, 20.543));
+
+    const { estimate: fem, lower: fel, upper: feu, studyEstimates: fee } = pooledMean(ns, means, sds, false);
+    assert.ok(within(fem, 10.1879));
+    assert.ok(within(fel, 10.1267));
+    assert.ok(within(feu, 10.2491));
   });
 
   /*

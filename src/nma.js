@@ -656,7 +656,7 @@ function _ORNMAPreconditions(studies, treatments, positiveCounts, totalCounts) {
 
 /**
  * Perform a Network Meta-Analysis (NMA) on discrete, binomial outcomes, using an Odds Ratio (OR) as the
- * basis of comparison. Note that fixed effects models, default, assume that all studies sample from the same effects
+ * basis of comparison. Note that fixed effects models assume that all studies sample from the same effects
  * distribution. This is often false in practice, due to different experimental designs, procedures, etc. However, fixed
  * effects can be desirable in some cases for their simplicity and increased power over alternatives
  *
@@ -669,7 +669,7 @@ function _ORNMAPreconditions(studies, treatments, positiveCounts, totalCounts) {
  * @param {Boolean} randomEffects whether or not random effects should be modeled (using the DerSimonian-Laird estimator)
  * @return {NetworkMetaAnalysis}
  */
-function oddsRatioNMA(studies, treatments, positiveCounts, totalCounts, randomEffects=false) {
+function oddsRatioNMA(studies, treatments, positiveCounts, totalCounts, randomEffects=true) {
   _ORNMAPreconditions(studies, treatments, positiveCounts, totalCounts);
 
   return _generalizedNMA(studies, treatments, _buildAllPairsORStatistics, {
@@ -733,7 +733,7 @@ function _buildAllPairsMeanDifferenceStatistics(treatments, params) {
 
 /**
  * Perform a Network Meta-Analysis (NMA) on continuous outcomes, using a mean difference as the
- * basis of comparison. Note that fixed effects models (default) assume that all studies sample from the same effects
+ * basis of comparison. Note that fixed effects models assume that all studies sample from the same effects
  * distribution. This is often false in practice, due to different experimental designs, procedures, etc. However, fixed
  * effects may be desirable for their simplicity and increased power over alternatives
  *
@@ -745,7 +745,7 @@ function _buildAllPairsMeanDifferenceStatistics(treatments, params) {
  * @param {Boolean} randomEffects whether or not random effects should be modeled (using the DerSimonian-Laird estimator)
  * @return {NetworkMetaAnalysis}
  */
-function meanDifferenceNMA(studies, treatments, means, standardDeviations, experimentalUnits, randomEffects=false) {
+function meanDifferenceNMA(studies, treatments, means, standardDeviations, experimentalUnits, randomEffects=true) {
   _MDNMAPreconditions(studies, treatments, means, standardDeviations);
 
   return _generalizedNMA(studies, treatments, _buildAllPairsMeanDifferenceStatistics, {
