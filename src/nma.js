@@ -4,6 +4,10 @@ const {getConnectedComponents} = require('./graph');
 
 const STD_NORMAL = distributions.Normal(0, 1);
 
+function invertNChoose2(x) {
+  return (1 + Math.sqrt(8 * x + 1)) / 2;
+}
+
 /**
  * @param {Array} a
  * @param {Array} b
@@ -197,6 +201,7 @@ class NetworkMetaAnalysis {
    * get the (direct) effects and inferential statistics from individual studies feeding into the pooled estimates
    * inferentials are built on normal approximations
    * @param treatment the baseline used in treatment effect calculation
+   * @param {Number} width the confidence interval width [0-1]
    * @return {Array} study level effects. objects in the array will have `study`, `treatment1`, `treatment2`, `effect`, `lower`, `upper`, `p`, `comparisonN`
    */
   computeStudyLevelEffects(treatment, width=.95) {
@@ -226,6 +231,12 @@ class NetworkMetaAnalysis {
   }
 }
 
+/**
+ * mimics https://github.com/guido-s/netmeta/blob/bd409919141a6519d6791afa036529e2eb069961/R/nma.ruecker.R#L19
+ * @param {Array} studies the study label, for each contrast
+ * @return {number}
+ * @private
+ */
 function _computeDF1(studies) {
   const lookup = {};
   studies.forEach((s) => {
@@ -236,7 +247,7 @@ function _computeDF1(studies) {
       lookup[s] += 1;
     }
   });
-  const studyArmCounts = Object.values(lookup);
+  const studyArmCounts = studies.map((s) => invertNChoose2(lookup[s]));
   return 2 * (studyArmCounts.map((x) => 1 / x).reduce((a, b) => a + b, 0));
 }
 
@@ -248,11 +259,9 @@ function _computeDF1(studies) {
  * @param {Array<Number>} treatmentIndicesA indexed 0:nTreatments
  * @param {Array<Number>} treatmentIndicesB indexed 0:nTreatments
  * @param {Array} studies study labels corresponding to studies that effects were observed in (in order)
- * @param {Number} tau a number used for random effects. set to 0 for fixed effects (default)
- * @return {{aggregatedInferentialStatistics: any[], aggregatedTreatmentEffects: Matrix, consistentContrastEffects: Array<Number>
  * @private
  */
-function _NMA(effects, standardErrors, treatmentIndicesA, treatmentIndicesB, studies, tau=0) {
+function _NMA(effects, standardErrors, treatmentIndicesA, treatmentIndicesB, studies) {
   const m = effects.length;
 
   if (m !== standardErrors.length && m !== treatmentIndicesA.length && m !== bTreatmentIndices.length) {
@@ -263,13 +272,13 @@ function _NMA(effects, standardErrors, treatmentIndicesA, treatmentIndicesB, stu
   // number of unique treatments
   const nTreatments = _setUnion(treatmentIndicesA, treatmentIndicesB).size;
   // per-study weights
-  const W = Matrix.diagonal(standardErrors.map(se => 1 / (Math.pow(se, 2) + Math.pow(tau, 2))));
+  const W = Matrix.diagonal(standardErrors.map(se => 1 / Math.pow(se, 2)));
   // contrast matrices
   const BObserved = _buildObservedPairwiseContrasts(treatmentIndicesA, treatmentIndicesB);
 
   // linear algebra I don't understand
   const L = BObserved.transpose().mmul(W).mmul(BObserved);
-  const LInv = inverse(L.subtract(1 / nTreatments)).add(1 / nTreatments);
+  const LInv = inverse(Matrix.subtract(L,1 / nTreatments)).add(1 / nTreatments);
 
   const R = Matrix.zeros(nTreatments, nTreatments);
   for (let i = 0; i < nTreatments; i++) {
@@ -347,11 +356,11 @@ function _NMA(effects, standardErrors, treatmentIndicesA, treatmentIndicesB, stu
   const df1 = _computeDF1(studies);
   const df = df1 - (nTreatments - 1);
   const v = Matrix.columnVector(effects);
-  const teDiff = v.subtract(Matrix.columnVector(consistentContrastEffects));
-  const Q = teDiff.transpose().mmul(W).mmul(teDiff);
+  const teDiff = Matrix.subtract(v, Matrix.columnVector(consistentContrastEffects));
+  const Q = teDiff.transpose().mmul(W).mmul(teDiff).get(0, 0);
   const I = Matrix.identity(m, m);
-  const eMod = E.multiply(BObserved.mmul(BObserved.transpose()).get(0, 0)).divide(2);
-  const computedTau2 = Q.subtract(df) / I.subtract(H).mmul(eMod).mmul(W);
+  const eMod = Matrix.multiply(BObserved.mmul(BObserved.transpose()), Matrix.divide(E, 2));
+  const computedTau2 = (Q - df) / Matrix.subtract(I, H).mmul(eMod).mmul(W).trace();
   const tauComputed = Math.sqrt(Math.max(0, computedTau2));
 
   return {
@@ -371,7 +380,7 @@ function _NMA(effects, standardErrors, treatmentIndicesA, treatmentIndicesB, stu
  */
 function _computeNewSEs(r) {
   const nPairings = r.length;
-  const nStudyArms = (1 + Math.sqrt(8 * nPairings + 1)) / 2;
+  const nStudyArms = invertNChoose2(nPairings);
 
   const B = _buildAllPairwiseContrasts(nStudyArms);
   const Bt = B.transpose();
@@ -404,16 +413,17 @@ function _computeNewSEs(r) {
  * @param {Array} treatmentsA treatment applied to the "numerator" in each contrast
  * @param {Array} treatmentsB treatment applied to the "denominator" in each contrast
  * @param {Array} studies a set of labels (one for each contrast), indicating which study the contrast occurred in
+ * @param {Number} tau estimate of between study variance (random effects). 0 = fixed effects
  * @return {{treatmentIndicesB: Array<Number>, treatmentIndicesA: Array<Number>, orderedTreatments: Array, standardErrors: Array<Number>}}
  * @private
  */
-function _computePrerequisites(effectStandardErrors, treatmentsA, treatmentsB, studies) {
+function _computePrerequisites(effectStandardErrors, treatmentsA, treatmentsB, studies, tau=0) {
   // map treatments to unique indices, starting from 0
   const allTreatments = Array.from(_setUnion(treatmentsA, treatmentsB));
   const treatmentIndicesA = treatmentsA.map(trt => allTreatments.indexOf(trt));
   const treatmentIndicesB = treatmentsB.map(trt => allTreatments.indexOf(trt));
 
-  const perPairWeights = effectStandardErrors.map(se => 1 / Math.pow(se, 2));
+  const perPairWeights = effectStandardErrors.map(se => 1 / (Math.pow(se, 2) + Math.pow(tau, 2)));
   // TODO this loop is kind of slow, and could be replaced by a sort + linear scan
   // but that might provide confusing interfaces downstream
   Array.from(new Set(studies)).forEach(study => {
@@ -560,12 +570,14 @@ function _generalizedNMA(studies, treatments, buildContrasts, parameters, transf
     if (randomEffects) {
       // with random effects, we are deriving tau from the fixed effects model - this amounts to a DerSimonian-Laird estimator
       const tau = nmaData.tau;
-      nmaData = _NMA(effects, preprocessedData.standardErrors, preprocessedData.treatmentIndicesA,
-        preprocessedData.treatmentIndicesB, contrastStudies, tau);
+      // since we weight differently with tau, we need to recompute the "prerequisites"
+      const preprocessedRFData = _computePrerequisites(standardErrors, treatmentsA, treatmentsB, contrastStudies, tau);
+      nmaData = _NMA(effects, preprocessedRFData.standardErrors, preprocessedRFData.treatmentIndicesA,
+        preprocessedRFData.treatmentIndicesB, contrastStudies);
     }
 
     return {
-      treatmentEffects:nmaData.treatmentEffects,
+      treatmentEffects: nmaData.treatmentEffects,
       standardErrors: nmaData.standardErrors,
       orderedTreatments: preprocessedData.orderedTreatments,
       studyLevelEffects,
@@ -580,8 +592,6 @@ function _generalizedNMA(studies, treatments, buildContrasts, parameters, transf
  * note all ORs are log (base e) transformed to get a symmetric sampling distribution
  *
  * @param {Array} treatments condition applied to each study arm
- * @param {Array<Number>} positiveCounts observed positive (numerator) outcomes in each study arm
- * @param {Array<Number>} totalCounts total number of units in each study arm
  * @param {Number} incr Anscombe correction, added to all cells (regardless of zero counts) as a bias correction
  */
 function _buildAllPairsORStatistics(treatments, params, incr = .5) {

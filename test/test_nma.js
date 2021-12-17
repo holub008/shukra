@@ -174,7 +174,7 @@ describe('Odds Ratio FE NMA', function () {
   });
 });
 
-describe('Mean Difference FE NMA', function () {
+describe('Mean Difference NMA', function () {
   // this is a faux dataset
   const studies = ['A', 'A', 'B', 'B', 'B', 'C', 'C'];
   const trts = [1, 2, 1, 2, 3, 3, 2];
@@ -182,9 +182,10 @@ describe('Mean Difference FE NMA', function () {
   const sds = [4.923423, 3.867062, 3.250787, 6.349051, 6.664182, 4.324474, 4.301156];
   const ns = [63, 45, 35, 44, 53, 75, 29];
 
-  const nma = meanDifferenceNMA(studies, trts, means, sds, ns);
+  const nmaFE = meanDifferenceNMA(studies, trts, means, sds, ns);
+  const nmaRE = meanDifferenceNMA(studies, trts, means, sds, ns, true);
 
-  it('should produce reasonable effect size estimates', function () {
+  it('should produce reasonable fixed effects effect size estimates', function () {
     /** checked via the following R code
      set.seed(55414)
      data <- data.frame(
@@ -200,33 +201,60 @@ describe('Mean Difference FE NMA', function () {
      summary(net)
      */
 
-    const oneTwo = nma.getEffect(1, 2);
-    const twoOne = nma.getEffect(2, 1);
+    const oneTwo = nmaFE.getEffect(1, 2);
+    const twoOne = nmaFE.getEffect(2, 1);
 
     assert.ok(oneTwo < -2.818 && oneTwo > -2.819);
     assert.ok(twoOne > 2.818 && twoOne < 2.819);
 
-    const twoTwo = nma.getEffect(1, 1);
+    const twoTwo = nmaFE.getEffect(1, 1);
     assert.ok(Math.abs(twoTwo) < .00001);
 
-    const threeTwo = nma.getEffect(3, 2);
-    assert.ok(threeTwo < -0.312 && threeTwo > -0.313)
+    const threeTwo = nmaFE.getEffect(3, 2);
+    assert.ok(threeTwo < -0.312 && threeTwo > -0.313);
+  });
+
+  it('should produce reasonable random effects effect size estimates', function () {
+    /** checked via the following R code
+     set.seed(55414)
+     data <- data.frame(
+     mean = c(8, 10, 7, 10.5, 10.5, 10, 11),
+     sd = abs(rnorm(7, 5)),
+     studlab = c('A', 'A', 'B', 'B', 'B', 'C', 'C'),
+     treat = c(1, 2, 1, 2, 3, 3, 2),
+     n = round(rnorm(7, 50, 10))
+     )
+
+     p <- with(data, pairwise(treat, mean=mean, sd=sd, studlab = studlab, n=n))
+     net <- netmeta(p$TE, p$seTE, p$treat1, p$treat2, p$studlab, sm='MD', comb.fixed = FALSE, comb.random = TRUE)
+     summary(net)
+     */
+
+    const oneTwo = nmaRE.getEffect(1, 2);
+
+    assert.ok(oneTwo > -2.848 && oneTwo < -2.847);
+
+    const twoTwo = nmaRE.getEffect(1, 1);
+    assert.ok(Math.abs(twoTwo) < .00001);
+
+    const threeTwo = nmaRE.getEffect(3, 2);
+    assert.ok(threeTwo > -0.308 && threeTwo < -0.307)
   });
 
   it('should produce reasonable inferential statistics', function () {
-    const oneThree95 = nma.computeInferentialStatistics(1, 3, .95);
+    const oneThree95 = nmaFE.computeInferentialStatistics(1, 3, .95);
     assert.ok(oneThree95.lower > -4.095 && oneThree95.lower < -4.09);
     assert.ok(oneThree95.upper > -0.918 && oneThree95.upper < -0.917);
     assert.ok(oneThree95.p < .05);
 
-    const twoThree95 = nma.computeInferentialStatistics(2, 3, .95);
+    const twoThree95 = nmaFE.computeInferentialStatistics(2, 3, .95);
     assert.ok(twoThree95.lower > -1.12 && twoThree95.lower < -1.11);
     assert.ok(twoThree95.upper > 1.735 && twoThree95.upper < 1.745);
     assert.ok(twoThree95.p > .05);
   });
 
   it('should produce study level effects', function() {
-    const effects = nma.computeStudyLevelEffects(1);
+    const effects = nmaFE.computeStudyLevelEffects(1);
     assert.deepStrictEqual(effects.length, 3);
 
     /* verify with R code:
@@ -248,7 +276,7 @@ describe('Mean Difference FE NMA', function () {
       study: 'A'
     },);
 
-    const effects2 = nma.computeStudyLevelEffects(2);
+    const effects2 = nmaFE.computeStudyLevelEffects(2);
     assert.deepStrictEqual(effects2.length, 4);
     /* verify with R code:
       se <- p$seTE[5]
@@ -294,7 +322,7 @@ describe('Mean Difference FE NMA', function () {
     netrank(net, 'bad')
    */
   it('should produce valid SUCRA scores', function() {
-    const smallerBetterRanks = nma.computePScores(true)
+    const smallerBetterRanks = nmaFE.computePScores(true)
       .map((x) => {
         x.pScore = Math.round(x.pScore * 10000) / 10000;
         return x;
@@ -314,7 +342,7 @@ describe('Mean Difference FE NMA', function () {
       },
     ]);
 
-    const biggerBetterRanks = nma.computePScores(false)
+    const biggerBetterRanks = nmaFE.computePScores(false)
       .map((x) => {
         x.pScore = Math.round(x.pScore * 10000) / 10000;
         return x;
