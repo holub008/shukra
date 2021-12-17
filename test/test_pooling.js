@@ -51,7 +51,7 @@ describe('Random effects mean pooling', function () {
     assert.ok(within(studyEstimates[2].lower, 19.457));
     assert.ok(within(studyEstimates[2].upper, 20.543));
 
-    const { estimate: fem, lower: fel, upper: feu, studyEstimates: fee } = pooledMean(ns, means, sds, false);
+    const { estimate: fem, lower: fel, upper: feu } = pooledMean(ns, means, sds, false);
     assert.ok(within(fem, 10.1879));
     assert.ok(within(fel, 10.1267));
     assert.ok(within(feu, 10.2491));
@@ -64,7 +64,9 @@ describe('Random effects mean pooling', function () {
    means <- c(10, 15, 20)
    sds <- c(1, 1.7, 2.4)
    ns <- c(1000, 50, 75)
-   mm <- metamean(ns, means, sds)
+   mm <- metamean(ns, means, sds, random=TRUE)
+   mmfe <- metamean(ns, means, sds, random=FALSE)
+
   */
   it('should produce correct results with missing sds', function () {
     const means = [10, 15, 20];
@@ -79,6 +81,11 @@ describe('Random effects mean pooling', function () {
     assert.ok(within(studyEstimates[1].estimate, 15));
     assert.ok(within(studyEstimates[1].lower, 14.528));
     assert.ok(within(studyEstimates[1].upper, 15.471));
+
+    const { estimate: fem, lower: fel, upper: feu } = pooledMean(ns, means, sds, false);
+    assert.ok(within(fem, 10.2103));
+    assert.ok(within(fel, 10.1493));
+    assert.ok(within(feu, 10.2714));
   });
 
   /*
@@ -103,7 +110,9 @@ describe('Random effects mean pooling', function () {
    means <- c(10)
    sds <- c(1)
    ns <- c(1000)
-   mm <- metamean(ns, means, sds)
+   metamean(ns, means, sds, random=TRUE)
+   metamean(ns, means, sds, random=FALSE)
+
   */
   it('should handle a single point estimate', function() {
     const means = [10];
@@ -113,6 +122,11 @@ describe('Random effects mean pooling', function () {
     assert.ok(within(estimate, 10));
     assert.ok(within(lower, 9.94));
     assert.ok(within(upper, 10.06));
+
+    const { estimate: fem, lower: fel, upper: feu } = pooledMean(ns, means, sds, false);
+    assert.ok(within(fem, 10));
+    assert.ok(within(fel, 9.94));
+    assert.ok(within(feu, 10.06));
   });
 
   it('should handle no point estimates', function() {
@@ -192,7 +206,9 @@ describe('Random effects rate pooling', function () {
     library(meta)
     events_p  <- c(10, 15, 20, 24, 25, 39, 10)
     ns_p <- c(50, 65, 90,  100, 95, 150, 160)
-    mp_i <- metaprop(events_p, ns_p, method='Inverse')
+    metaprop(events_p, ns_p, method='Inverse')
+    metaprop(events_p, ns_p, method='Inverse', random=FALSE)
+    # exp() / (exp() + 1) of $TE give probabilities. CIs ($lower and $upper) are both already transformed
   */
   it('should produce correct results for full data', function () {
     const events = [10, 15, 20, 24, 25, 39, 10];
@@ -204,7 +220,7 @@ describe('Random effects rate pooling', function () {
 
     assert.strictEqual(studyEstimates.length, 7);
     // note that since we are using a normal approximation over a beta, our CIs will be shifted left a bit more than is proper
-    // I believe that drives the difference ~1% differences in what `meta` is giving
+    // I believe that drives the ~1% differences in what `meta` is giving
     assert.ok(within(studyEstimates[0].estimate, .2));
     assert.ok(within(studyEstimates[0].lower, .09));
     assert.ok(within(studyEstimates[0].upper, .31));
@@ -212,6 +228,16 @@ describe('Random effects rate pooling', function () {
     assert.ok(within(studyEstimates[6].estimate, .0625));
     assert.ok(within(studyEstimates[6].lower, .0250));
     assert.ok(within(studyEstimates[6].upper, .100));
+
+    const { estimate: ef, lower: lf, upper: uf, studyEstimates: sef } = pooledRate(ns, events, false);
+    assert.ok(within(ef, .2187));
+    assert.ok(within(lf, .1885));
+    assert.ok(within(uf, .2523));
+
+    assert.strictEqual(sef.length, 7);
+    assert.ok(within(sef[0].estimate, .20));
+    assert.ok(within(sef[0].lower, .1003, .05));
+    assert.ok(within(sef[0].upper, .3371, .05));
   });
 
   /*
