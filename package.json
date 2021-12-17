@@ -1,6 +1,6 @@
 {
   "name": "shukra",
-  "version": "2.3.3",
+  "version": "3.0.0",
   "description": "Compute meta-analytical statistics",
   "main": "src/index.js",
   "scripts": {

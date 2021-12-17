@@ -31,6 +31,13 @@ function computeDLEstimator(te, se, minEstimator=0) {
   return Math.max((rss - (k - p)) / trP, minEstimator);
 }
 
+function pooling(te, w) {
+  return {
+    tePooled: weightedMean(te, w),
+    seTEPooled: Math.sqrt(1 / sum(w)),
+  };
+}
+
 function randomEffectsPooling(te, seTE) {
   const tau2 = computeDLEstimator(te, seTE);
   const w = seTE.map((se) => {
@@ -38,16 +45,21 @@ function randomEffectsPooling(te, seTE) {
     return denominator ? 1 / denominator : 0;
   });
 
-  return {
-    tePooled: weightedMean(te, w),
-    seTEPooled: Math.sqrt(1 / sum(w)),
-  };
+  return pooling(te, w);
+}
+
+function fixedEffectsPooling(te, seTE) {
+  const w = seTE.map((se) => {
+    const denominator = (Math.pow(se, 2));
+    return denominator ? 1 / denominator : 0;
+  });
+  return pooling(te, w);
 }
 
 /**
  * Compute a pooled mean using inverse variance weighting & random effects.
- * Tau is computed via the DerSimonian-Laird estimator and confidence intervals are obtained through normal
- * approximations.
+ * If using random effects, Tau is computed via the DerSimonian-Laird estimator
+ * Confidence intervals are obtained through normal approximations.
  *
  * Although it should be avoided as possible, missing SDs are imputed.
  * https://training.cochrane.org/handbook/archive/v6/chapter-06#section-6-5-2 weakly suggests using the average
@@ -57,11 +69,12 @@ function randomEffectsPooling(te, seTE) {
  * @param n an array of the number of units behind a mean point estimate
  * @param mean an array of the mean point estimates
  * @param sd an array of the standard deviations. note, entries may be undefined/null and will be imputed.
+ * @param randomEffects whether or not to estimate with random (true) or fixed (false) effects
  * @param width the desired width [0-1] of the CI on the pooled median estimate
  * @return an object with attributes `estimate` (pooled mean), `lower` (lower bound of pooled mean CI), `upper`, and `studyEstimates`.
  * if no point estimates are supplied, an empty object is returned
  */
-function randomEffectsPooledMean(n, mean, sd, width=.95) {
+function pooledMean(n, mean, sd, randomEffects=true, width=.95) {
   preconditionNotNull(n, 'n');
   preconditionNotNull(mean, 'mean');
   preconditionAllPositive(sd, 'sd');
@@ -100,7 +113,7 @@ function randomEffectsPooledMean(n, mean, sd, width=.95) {
 
   let tePooled, seTEPooled;
   if (mean.length > 1) {
-    const { tePooled: a, seTEPooled: b } = randomEffectsPooling(mean, seTE);
+    const { tePooled: a, seTEPooled: b } = randomEffects ? randomEffectsPooling(mean, seTE) : fixedEffectsPooling(mean, seTE);
     tePooled = a;
     seTEPooled = b;
   }
@@ -127,16 +140,17 @@ function validateBinomial(events, n) {
 }
 
 /**
- * Compute a pooled rate using a inverse variance pooling & random effects.
- * Tau is computed via the DerSimonian-Laird estimator and confidence intervals are obtained through normal
- * approximations. All computation is done on log odds, before transforming back to probabilities for the caller.
+ * Compute a pooled rate using a inverse variance pooling
+ * If using random effects, Tau is computed via the DerSimonian-Laird estimator.
+ * Confidence intervals are obtained through normal approximations. All computation is done on log odds, before transforming back to probabilities for the caller.
  *
  * @param n an array of the number of units
  * @param events an array of the number of positive occurrences within the n units
+ * @param randomEffects whether or not to estimate with random (true) or fixed (false) effects
  * @param width the desired width [0-1] of the CI on the pooled median estimate
  * @return an object with attributes `estimate` (pooled rate), `lower` (lower bound of pooled rate CI), `upper`, and `studyEstimates`
  */
-function randomEffectsPooledRate(n, events, width=.95) {
+function pooledRate(n, events, randomEffects=true, width=.95) {
   preconditionNotNull(n, 'n');
   preconditionNotNull(events, 'events');
   preconditionAllPositive(n, 'n', true);
@@ -172,7 +186,7 @@ function randomEffectsPooledRate(n, events, width=.95) {
 
   let tePooled, seTEPooled;
   if (te.length > 1) {
-    const { tePooled: a, seTEPooled: b } = randomEffectsPooling(te, seTE);
+    const { tePooled: a, seTEPooled: b } = randomEffects ? randomEffectsPooling(te, seTE) : fixedEffectsPooling(te, seTE);
     tePooled = a;
     seTEPooled = b;
   }
@@ -197,7 +211,7 @@ function randomEffectsPooledRate(n, events, width=.95) {
  * @param mean an array of the mean point estimates
  * @return a number representing the pooled estimate
  */
-function pooledMean(n, mean) {
+function arithmeticPooledMean(n, mean) {
   preconditionNotNull(n, 'n');
   preconditionNotNull(mean, 'mean');
   preconditionAllPositive(n, 'n');
@@ -253,8 +267,8 @@ function pooledMedian(n, median, width=.95) {
 }
 
 module.exports = {
-  randomEffectsPooledMean: randomEffectsPooledMean,
   pooledMean: pooledMean,
+  arithmeticPooledMean: arithmeticPooledMean,
   pooledMedian: pooledMedian,
-  randomEffectsPooledRate: randomEffectsPooledRate,
+  pooledRate: pooledRate,
 };

@@ -226,6 +226,20 @@ class NetworkMetaAnalysis {
   }
 }
 
+function _computeDF1(studies) {
+  const lookup = {};
+  studies.forEach((s) => {
+    const existingCount = lookup[s];
+    if (existingCount === undefined) {
+      lookup[s] = 1
+    } else {
+      lookup[s] += 1;
+    }
+  });
+  const studyArmCounts = Object.values(lookup);
+  return 2 * (studyArmCounts.map((x) => 1 / x).reduce((a, b) => a + b, 0));
+}
+
 /**
  * perform a fixed effect NMA
  *
@@ -233,10 +247,12 @@ class NetworkMetaAnalysis {
  * @param {Array<Number>} standardErrors standard errors of the treatments
  * @param {Array<Number>} treatmentIndicesA indexed 0:nTreatments
  * @param {Array<Number>} treatmentIndicesB indexed 0:nTreatments
+ * @param {Array} studies study labels corresponding to studies that effects were observed in (in order)
+ * @param {Number} tau a number used for random effects. set to 0 for fixed effects (default)
  * @return {{aggregatedInferentialStatistics: any[], aggregatedTreatmentEffects: Matrix, consistentContrastEffects: Array<Number>
  * @private
  */
-function _fixedEffectsNMA(effects, standardErrors, treatmentIndicesA, treatmentIndicesB) {
+function _NMA(effects, standardErrors, treatmentIndicesA, treatmentIndicesB, studies, tau=0) {
   const m = effects.length;
 
   if (m !== standardErrors.length && m !== treatmentIndicesA.length && m !== bTreatmentIndices.length) {
@@ -247,7 +263,7 @@ function _fixedEffectsNMA(effects, standardErrors, treatmentIndicesA, treatmentI
   // number of unique treatments
   const nTreatments = _setUnion(treatmentIndicesA, treatmentIndicesB).size;
   // per-study weights
-  const W = Matrix.diagonal(standardErrors.map(se => 1 / Math.pow(se, 2)));
+  const W = Matrix.diagonal(standardErrors.map(se => 1 / (Math.pow(se, 2) + Math.pow(tau, 2)));
   // contrast matrices
   const BObserved = _buildObservedPairwiseContrasts(treatmentIndicesA, treatmentIndicesB);
 
@@ -262,11 +278,6 @@ function _fixedEffectsNMA(effects, standardErrors, treatmentIndicesA, treatmentI
     }
   }
 
-  const V = new Array(m);
-  for (let i = 0; i < V.length; i++) {
-    V[i] = R.get(treatmentIndicesA[i], treatmentIndicesB[i]);
-  }
-
   const G = BObserved.mmul(LInv).mmul(BObserved.transpose());
   const H = G.mmul(W);
 
@@ -274,9 +285,6 @@ function _fixedEffectsNMA(effects, standardErrors, treatmentIndicesA, treatmentI
   const treatmentEffectMatrix = Matrix.columnVector(effects);
   // transform observed treatment effects to those consistent with the NMA
   const consistentContrastEffects = H.mmul(treatmentEffectMatrix).getColumn(0);
-  // if CIs are ever needed:
-  //const consistentContrastCIs = consistentContrastEffects.map(e =>
-  //    _computeInferentialStatistics(e, Math.sqrt(e), width));
 
   // aggregated treatment effects
   const aggregatedTreatmentEffects = Matrix.zeros(nTreatments, nTreatments);
@@ -325,10 +333,32 @@ function _fixedEffectsNMA(effects, standardErrors, treatmentIndicesA, treatmentI
     }
   }
 
+  // computing tau for random effects
+  // i have little understanding of what's happening here - we just test it for correctness in transcription
+
+  const E = Matrix.zeros(m, m);
+  for (let i = 0; i < m; i++) {
+    for (let j = 0; j < m; j++) {
+      if (studies[i] === studies[j]) {
+        E.set(i, j, 1);
+      }
+    }
+  }
+  const df1 = _computeDF1(studies);
+  const df = df1 - (nTreatments - 1);
+  const v = Matrix.columnVector(effects);
+  const teDiff = v.subtract(Matrix.columnVector(consistentContrastEffects));
+  const Q = teDiff.transpose().mmul(W).mmul(teDiff);
+  const I = Matrix.identity(m, m);
+  const eMod = E.multiply(BObserved.mmul(BObserved.transpose()).get(0, 0)).divide(2);
+  const computedTau2 = Q.subtract(df) / I.subtract(H).mmul(eMod).mmul(W);
+  const tau = Math.sqrt(Math.max(0, computedTau2));
+
   return {
     consistentContrastEffects: consistentContrastEffects,
     treatmentEffects: aggregatedTreatmentEffects,
     standardErrors: aggregatedStandardErrors,
+    tau,
   };
 }
 
@@ -373,7 +403,7 @@ function _computeNewSEs(r) {
  * @param {Array<Number>} effectStandardErrors
  * @param {Array} treatmentsA treatment applied to the "numerator" in each contrast
  * @param {Array} treatmentsB treatment applied to the "denominator" in each contrast
- * @param {Array} studies a set of labels (one for each contrast), indicating which study the contrast occured in
+ * @param {Array} studies a set of labels (one for each contrast), indicating which study the contrast occurred in
  * @return {{treatmentIndicesB: Array<Number>, treatmentIndicesA: Array<Number>, orderedTreatments: Array, standardErrors: Array<Number>}}
  * @private
  */
@@ -468,7 +498,7 @@ function _mergeComponentNMAResults(results) {
  * @param transformation {Function} maps effects computed in `buildContrasts` to a different space (typically one more interprettable)
  * @return {NetworkMetaAnalysis}
  */
-function _generalizedNMA(studies, treatments, buildContrasts, parameters, transformation=(x) => x) {
+function _generalizedNMA(studies, treatments, buildContrasts, parameters, transformation=(x) => x, randomEffects=false) {
   if (studies.length === 0) {
     // https://github.com/mljs/matrix/issues/113 limits the API we can provide
     throw new Error('Must have 1 or more studies to perform an NMA');
@@ -524,8 +554,14 @@ function _generalizedNMA(studies, treatments, buildContrasts, parameters, transf
     }));
 
     const preprocessedData = _computePrerequisites(standardErrors, treatmentsA, treatmentsB, contrastStudies);
-    const nmaData = _fixedEffectsNMA(effects, preprocessedData.standardErrors, preprocessedData.treatmentIndicesA,
-      preprocessedData.treatmentIndicesB);
+    let nmaData = _NMA(effects, preprocessedData.standardErrors, preprocessedData.treatmentIndicesA,
+      preprocessedData.treatmentIndicesB, contrastStudies);
+    if (randomEffects) {
+      // with random effects, we are deriving tau from the fixed effects model - this amounts to a DerSimonian-Laird estimator
+      const tau = nmaData.tau;
+      nmaData = _NMA(effects, preprocessedData.standardErrors, preprocessedData.treatmentIndicesA,
+        preprocessedData.treatmentIndicesB, contrastStudies, tau);
+    }
 
     return {
       treatmentEffects:nmaData.treatmentEffects,

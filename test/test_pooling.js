@@ -1,5 +1,5 @@
 const assert = require('assert');
-const {pooledMedian, randomEffectsPooledMean, randomEffectsPooledRate, pooledMean} = require('../src/pooling');
+const {pooledMedian, pooledMean, pooledRate, arithmeticPooledMean} = require('../src/pooling');
 
 function within(real, expected, epsilon=.01) {
   if ((isNaN(real) && !isNaN(expected)) || (!isNaN(real) && isNaN(expected))) {
@@ -31,7 +31,7 @@ describe('Random effects mean pooling', function () {
     const means = [10, 15, 20];
     const sds = [1, 2, 2.4];
     const ns = [1000, 50, 75];
-    const { estimate, lower, upper, studyEstimates } = randomEffectsPooledMean(ns, means, sds);
+    const { estimate, lower, upper, studyEstimates } = pooledMean(ns, means, sds);
     assert.ok(within(estimate, 14.996));
     assert.ok(within(lower, 8.643));
     assert.ok(within(upper, 21.35));
@@ -63,7 +63,7 @@ describe('Random effects mean pooling', function () {
     const means = [10, 15, 20];
     const sds = [1, undefined, 2.4];
     const ns = [1000, 50, 75];
-    const { estimate, lower, upper, studyEstimates } = randomEffectsPooledMean(ns, means, sds);
+    const { estimate, lower, upper, studyEstimates } = pooledMean(ns, means, sds);
     assert.ok(within(estimate, 14.996));
     assert.ok(within(lower, 8.955));
     assert.ok(within(upper, 21.036));
@@ -85,7 +85,7 @@ describe('Random effects mean pooling', function () {
     const means = [10, -5, 20];
     const sds = [1, 2, 2.4];
     const ns = [1000, 50, 75];
-    const { estimate, lower, upper } = randomEffectsPooledMean(ns, means, sds);
+    const { estimate, lower, upper } = pooledMean(ns, means, sds);
     assert.ok(within(estimate, 8.3340));
     assert.ok(within(lower, -1.9188));
     assert.ok(within(upper, 18.5869));
@@ -102,45 +102,45 @@ describe('Random effects mean pooling', function () {
     const means = [10];
     const sds = [1];
     const ns = [1000];
-    const { estimate, lower, upper } = randomEffectsPooledMean(ns, means, sds);
+    const { estimate, lower, upper } = pooledMean(ns, means, sds);
     assert.ok(within(estimate, 10));
     assert.ok(within(lower, 9.94));
     assert.ok(within(upper, 10.06));
   });
 
   it('should handle no point estimates', function() {
-    const x = randomEffectsPooledMean([], [], []);
+    const x = pooledMean([], [], []);
     assert.deepStrictEqual(x, {studyEstimates: []});
   });
 
   it('should throw on missing critical values', function() {
-    assert.throws(() => randomEffectsPooledMean([10, 20], [undefined, 100], [undefined, 5]),
+    assert.throws(() => pooledMean([10, 20], [undefined, 100], [undefined, 5]),
       {
         message: 'Element at index 0 is missing in mean'
       });
 
-    assert.throws(() => randomEffectsPooledMean([10, undefined], [110, 100], [undefined, 5]),
+    assert.throws(() => pooledMean([10, undefined], [110, 100], [undefined, 5]),
       {
         message: 'Element at index 1 is missing in n'
       });
   });
 
   it('should throw on negative sd', function() {
-    assert.throws(() => randomEffectsPooledMean([10, 20], [95, 100], [-1, 5]),
+    assert.throws(() => pooledMean([10, 20], [95, 100], [-1, 5]),
       {
         message: 'Element at index 0 is non-positive in sd'
       });
   });
 
   it('should throw on non-positive n', function() {
-    assert.throws(() => randomEffectsPooledMean([10, 20], [95, 100], [-1, 5]),
+    assert.throws(() => pooledMean([10, 20], [95, 100], [-1, 5]),
       {
         message: 'Element at index 0 is non-positive in sd'
       });
   });
 
   it('should throw on invalid width', function() {
-    assert.throws(() => randomEffectsPooledMean([10, 20], [95, 100], [1, 5], 95),
+    assert.throws(() => pooledMean([10, 20], [95, 100], [1, 5], true,95),
       {
         message: 'Value width not in range 0 to 1'
       });
@@ -151,30 +151,30 @@ describe('Arithmetic mean pooling', function () {
   it('should produce correct results for full data', function () {
     const means = [10, 15, 20];
     const ns = [10, 20, 100];
-    const { estimate } = pooledMean(ns, means);
+    const { estimate } = arithmeticPooledMean(ns, means);
     assert.ok(within(estimate,18.461));
   });
 
 
   it('should throw on missing critical values', function() {
-    assert.throws(() => pooledMean([10, 20], [undefined, 100]),
+    assert.throws(() => arithmeticPooledMean([10, 20], [undefined, 100]),
       {
         message: 'Element at index 0 is missing in mean'
       });
 
-    assert.throws(() => pooledMean([10, undefined], [110, 100]),
+    assert.throws(() => arithmeticPooledMean([10, undefined], [110, 100]),
       {
         message: 'Element at index 1 is missing in n'
       });
   });
 
   it('should handle no point estimates', function() {
-    const x = pooledMean([], []);
+    const x = arithmeticPooledMean([], []);
     assert.deepStrictEqual(x, {});
   });
 
   it('should handle a single point estimate', function() {
-    const { estimate } = pooledMean([10], [50]);
+    const { estimate } = arithmeticPooledMean([10], [50]);
     assert.strictEqual(estimate, 50);
   });
 });
@@ -190,7 +190,7 @@ describe('Random effects rate pooling', function () {
   it('should produce correct results for full data', function () {
     const events = [10, 15, 20, 24, 25, 39, 10];
     const ns = [50, 65, 90,  100, 95, 150, 160];
-    const { estimate, lower, upper, studyEstimates } = randomEffectsPooledRate(ns, events);
+    const { estimate, lower, upper, studyEstimates } = pooledRate(ns, events);
     assert.ok(within(estimate, .204));
     assert.ok(within(lower, .15));
     assert.ok(within(upper, .27));
@@ -216,7 +216,7 @@ describe('Random effects rate pooling', function () {
   it('should handle 0 event counts', function() {
     const events = [50, 20, 10, 0];
     const ns = [100, 100, 50, 40];
-    const { estimate, lower, upper } = randomEffectsPooledRate(ns, events);
+    const { estimate, lower, upper } = pooledRate(ns, events);
     assert.ok(within(estimate, .222));
     assert.ok(within(lower, .090));
     assert.ok(within(upper, .451));
@@ -231,7 +231,7 @@ describe('Random effects rate pooling', function () {
   it('should handle event = total counts', function() {
     const events = [100, 85, 50, 30];
     const ns = [100, 100, 50, 40];
-    const { estimate, lower, upper } = randomEffectsPooledRate(ns, events);
+    const { estimate, lower, upper } = pooledRate(ns, events);
     assert.ok(within(estimate, .913));
     assert.ok(within(lower, .756));
     assert.ok(within(upper, .972));
@@ -244,7 +244,7 @@ describe('Random effects rate pooling', function () {
     mp_i <- metaprop(events_p, ns_p, method='Inverse')
   */
   it('should handle a single point estimate', function() {
-    const { estimate, lower, upper} = randomEffectsPooledRate([100], [50]);
+    const { estimate, lower, upper} = pooledRate([100], [50]);
     assert.ok(within(estimate, .5));
     assert.ok(within(lower, .403));
     assert.ok(within(upper, .597));
@@ -259,45 +259,45 @@ describe('Random effects rate pooling', function () {
   this test case is useful for asserting that we cap our tau^2 estimator at 0
  */
   it('should handle a small number of observations', function() {
-    const { estimate, lower, upper} = randomEffectsPooledRate([86, 24], [5, 1]);
+    const { estimate, lower, upper} = pooledRate([86, 24], [5, 1]);
     assert.ok(within(estimate, .055));
     assert.ok(within(lower, .0249));
     assert.ok(within(upper, .117));
   });
 
   it('should handle no point estimates', function() {
-    const x = randomEffectsPooledRate([], []);
+    const x = pooledRate([], []);
     assert.deepStrictEqual(x, {studyEstimates: []})
   });
 
   it('should throw on missing critical values', function() {
-    assert.throws(() => randomEffectsPooledRate([10, 20], [5, undefined]),
+    assert.throws(() => pooledRate([10, 20], [5, undefined]),
       {
         message: 'Element at index 1 is missing in events',
       });
 
-    assert.throws(() => randomEffectsPooledRate([10, undefined], [5, 10]),
+    assert.throws(() => pooledRate([10, undefined], [5, 10]),
       {
         message: 'Element at index 1 is missing in n',
       });
   });
 
   it('should throw on event > n', function() {
-    assert.throws(() => randomEffectsPooledRate([10, 20], [9, 21]),
+    assert.throws(() => pooledRate([10, 20], [9, 21]),
       {
         message: 'event is greater than n at index 1',
       });
   });
 
   it('should throw on non-positive n', function() {
-    assert.throws(() => randomEffectsPooledRate([-10, 20], [-11, 9]),
+    assert.throws(() => pooledRate([-10, 20], [-11, 9]),
       {
         message: 'Element at index 0 is non-positive in n',
       });
   });
 
   it('should throw on 0 n', function() {
-    assert.throws(() => randomEffectsPooledRate([0, 20], [0, 9]),
+    assert.throws(() => pooledRate([0, 20], [0, 9]),
       {
         message: 'Element at index 0 is non-positive in n',
       });
