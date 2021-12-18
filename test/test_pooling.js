@@ -245,14 +245,20 @@ describe('Random effects rate pooling', function () {
     events_p  <- c(50, 20, 10, 0)
     ns_p <- c(100, 100, 50, 40)
     mp_i <- metaprop(events_p, ns_p, method='Inverse')
+    mp_if <- metaprop(events_p, ns_p, method='Inverse', random=FALSE)
   */
   it('should handle 0 event counts', function() {
     const events = [50, 20, 10, 0];
     const ns = [100, 100, 50, 40];
     const { estimate, lower, upper } = pooledRate(ns, events);
-    assert.ok(within(estimate, .222));
-    assert.ok(within(lower, .090));
-    assert.ok(within(upper, .451));
+    assert.ok(within(estimate, .207, .05));
+    assert.ok(within(lower, .0685, .05));
+    assert.ok(within(upper, .4809, .05));
+
+    const { estimate: fe, lower: fl, upper: fu } = pooledRate(ns, events, false);
+    assert.ok(within(fe, 0.3283, .05));
+    assert.ok(within(fl, .270, .05));
+    assert.ok(within(fu, .3923, .05));
   });
 
   /*
@@ -260,6 +266,7 @@ describe('Random effects rate pooling', function () {
     events_p  <- c(100, 85, 50, 30)
     ns_p <- c(100, 100, 50, 40)
     mp_i <- metaprop(events_p, ns_p, method='Inverse')
+    mp_if <- metaprop(events_p, ns_p, method='Inverse', random=FALSE)
   */
   it('should handle event = total counts', function() {
     const events = [100, 85, 50, 30];
@@ -268,6 +275,11 @@ describe('Random effects rate pooling', function () {
     assert.ok(within(estimate, .913));
     assert.ok(within(lower, .756));
     assert.ok(within(upper, .972));
+
+    const { estimate: fe, lower: fl, upper: fu } = pooledRate(ns, events, false);
+    assert.ok(within(fe, 0.8403, .05));
+    assert.ok(within(fl, 0.7748, .05));
+    assert.ok(within(fu, 0.8895, .05));
   });
 
   /*
@@ -288,14 +300,22 @@ describe('Random effects rate pooling', function () {
   events_p  <- c(5, 1)
   ns_p <- c(86, 24)
   mp_i <- metaprop(events_p, ns_p, method='Inverse')
+  mp_if <- metaprop(events_p, ns_p, method='Inverse', random=FALSE)
 
   this test case is useful for asserting that we cap our tau^2 estimator at 0
  */
   it('should handle a small number of observations', function() {
-    const { estimate, lower, upper} = pooledRate([86, 24], [5, 1]);
+    const ns = [86, 24];
+    const events = [5, 1];
+    const { estimate, lower, upper} = pooledRate(ns, events);
     assert.ok(within(estimate, .055));
     assert.ok(within(lower, .0249));
     assert.ok(within(upper, .117));
+
+    const { estimate: fe, lower: fl, upper: fu } = pooledRate(ns, events, false);
+    assert.ok(within(fe, 0.0550));
+    assert.ok(within(fl, 0.0249));
+    assert.ok(within(fu, 0.1170));
   });
 
   it('should handle no point estimates', function() {

@@ -174,13 +174,37 @@ describe('Odds Ratio FE NMA', function () {
     assert.ok(ba.p < 0.28 && ba.p > 0.25);
   });
 
-  it('should produce study level effects', function() {
+  it('should produce fixed effects study level effects', function() {
     const effectsA = nmaFE.computeStudyLevelEffects('A');
     /*
       sum(p2$treat1 == 'A')
      */
     assert.deepStrictEqual(effectsA.length, 20);
     const effectsA1C = effectsA.filter(({ study, treatment2 }) => study  === 1 && treatment2 === 'C');
+    assert.deepStrictEqual(effectsA1C.length, 1);
+    /*
+      effect <- exp(p2$TE[1]) # should match effect below (note these effects are anscambe corrected .5
+      log_effect <- p2$TE[1]
+      se <- p2$seTE[1]
+      error <- qnorm(0.975)*se
+      exp(c(log_effect - error, log_effect + error)) # should match lower,upper
+     */
+    assert.deepStrictEqual(effectsA1C[0], {
+      p: 0.01190387738868881,
+      lower: 0.16335387790814926,
+      upper: 0.7987415280874249,
+      effect:  0.36121673003802274,
+      comparisonN: 280,
+      treatment1: 'A',
+      treatment2: 'C',
+      study: 1
+    });
+  });
+
+  it('should produce random effects study level effects', function() {
+    const effectsA = nmaRE.computeStudyLevelEffects('A');
+    assert.deepStrictEqual(effectsA.length, 20);
+    const effectsA1C = effectsA.filter(({ study, treatment2 }) => study === 1 && treatment2 === 'C');
     assert.deepStrictEqual(effectsA1C.length, 1);
     /*
       effect <- exp(p2$TE[1]) # should match effect below (note these effects are anscambe corrected .5
@@ -244,18 +268,8 @@ describe('Mean Difference NMA', function () {
 
   it('should produce reasonable random effects effect size estimates', function () {
     /** checked via the following R code
-     set.seed(55414)
-     data <- data.frame(
-     mean = c(8, 10, 7, 10.5, 10.5, 10, 11),
-     sd = abs(rnorm(7, 5)),
-     studlab = c('A', 'A', 'B', 'B', 'B', 'C', 'C'),
-     treat = c(1, 2, 1, 2, 3, 3, 2),
-     n = round(rnorm(7, 50, 10))
-     )
-
-     p <- with(data, pairwise(treat, mean=mean, sd=sd, studlab = studlab, n=n))
-     net <- netmeta(p$TE, p$seTE, p$treat1, p$treat2, p$studlab, sm='MD', comb.fixed = FALSE, comb.random = TRUE)
-     summary(net)
+     net2 <- netmeta(p$TE, p$seTE, p$treat1, p$treat2, p$studlab, sm='MD', comb.fixed = FALSE, comb.random = TRUE)
+     summary(net2)
      */
 
     const oneTwo = nmaRE.getEffect(1, 2);
@@ -269,7 +283,7 @@ describe('Mean Difference NMA', function () {
     assert.ok(threeTwo > -0.308 && threeTwo < -0.307)
   });
 
-  it('should produce reasonable inferential statistics', function () {
+  it('should produce reasonable fixed effects inferential statistics', function () {
     const oneThree95 = nmaFE.computeInferentialStatistics(1, 3, .95);
     assert.ok(oneThree95.lower > -4.095 && oneThree95.lower < -4.09);
     assert.ok(oneThree95.upper > -0.918 && oneThree95.upper < -0.917);
@@ -279,6 +293,13 @@ describe('Mean Difference NMA', function () {
     assert.ok(twoThree95.lower > -1.12 && twoThree95.lower < -1.11);
     assert.ok(twoThree95.upper > 1.735 && twoThree95.upper < 1.745);
     assert.ok(twoThree95.p > .05);
+  });
+
+  it('should produce reasonable random effects inferential statistics', function () {
+    const oneThree95 = nmaRE.computeInferentialStatistics(1, 3, .95);
+    assert.ok(oneThree95.lower > -4.33 && oneThree95.lower < -4.32);
+    assert.ok(oneThree95.upper > -0.76 && oneThree95.upper < -0.75);
+    assert.ok(oneThree95.p < .05);
   });
 
   it('should produce study level effects', function() {
