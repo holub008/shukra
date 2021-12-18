@@ -4,6 +4,10 @@ const {getConnectedComponents} = require('./graph');
 
 const STD_NORMAL = distributions.Normal(0, 1);
 
+function invertNChoose2(x) {
+  return (1 + Math.sqrt(8 * x + 1)) / 2;
+}
+
 /**
  * @param {Array} a
  * @param {Array} b
@@ -197,6 +201,7 @@ class NetworkMetaAnalysis {
    * get the (direct) effects and inferential statistics from individual studies feeding into the pooled estimates
    * inferentials are built on normal approximations
    * @param treatment the baseline used in treatment effect calculation
+   * @param {Number} width the confidence interval width [0-1]
    * @return {Array} study level effects. objects in the array will have `study`, `treatment1`, `treatment2`, `effect`, `lower`, `upper`, `p`, `comparisonN`
    */
   computeStudyLevelEffects(treatment, width=.95) {
@@ -227,16 +232,36 @@ class NetworkMetaAnalysis {
 }
 
 /**
- * perform a fixed effect NMA
+ * mimics https://github.com/guido-s/netmeta/blob/bd409919141a6519d6791afa036529e2eb069961/R/nma.ruecker.R#L19
+ * @param {Array} studies the study label, for each contrast
+ * @return {number}
+ * @private
+ */
+function _computeDF1(studies) {
+  const lookup = {};
+  studies.forEach((s) => {
+    const existingCount = lookup[s];
+    if (existingCount === undefined) {
+      lookup[s] = 1
+    } else {
+      lookup[s] += 1;
+    }
+  });
+  const studyArmCounts = studies.map((s) => invertNChoose2(lookup[s]));
+  return 2 * (studyArmCounts.map((x) => 1 / x).reduce((a, b) => a + b, 0));
+}
+
+/**
+ * perform an NMA from computed effects and SEs
  *
  * @param {Array<Number>} effects observed treatment effects
  * @param {Array<Number>} standardErrors standard errors of the treatments
  * @param {Array<Number>} treatmentIndicesA indexed 0:nTreatments
  * @param {Array<Number>} treatmentIndicesB indexed 0:nTreatments
- * @return {{aggregatedInferentialStatistics: any[], aggregatedTreatmentEffects: Matrix, consistentContrastEffects: Array<Number>
+ * @param {Array} studies study labels corresponding to studies that effects were observed in (in order)
  * @private
  */
-function _fixedEffectsNMA(effects, standardErrors, treatmentIndicesA, treatmentIndicesB) {
+function _NMA(effects, standardErrors, treatmentIndicesA, treatmentIndicesB, studies) {
   const m = effects.length;
 
   if (m !== standardErrors.length && m !== treatmentIndicesA.length && m !== bTreatmentIndices.length) {
@@ -253,18 +278,13 @@ function _fixedEffectsNMA(effects, standardErrors, treatmentIndicesA, treatmentI
 
   // linear algebra I don't understand
   const L = BObserved.transpose().mmul(W).mmul(BObserved);
-  const LInv = inverse(L.subtract(1 / nTreatments)).add(1 / nTreatments);
+  const LInv = inverse(Matrix.subtract(L,1 / nTreatments)).add(1 / nTreatments);
 
   const R = Matrix.zeros(nTreatments, nTreatments);
   for (let i = 0; i < nTreatments; i++) {
     for (let j = 0; j < nTreatments; j++) {
       R.set(i, j, LInv.get(i, i) + LInv.get(j, j) - 2 * LInv.get(i, j));
     }
-  }
-
-  const V = new Array(m);
-  for (let i = 0; i < V.length; i++) {
-    V[i] = R.get(treatmentIndicesA[i], treatmentIndicesB[i]);
   }
 
   const G = BObserved.mmul(LInv).mmul(BObserved.transpose());
@@ -274,9 +294,6 @@ function _fixedEffectsNMA(effects, standardErrors, treatmentIndicesA, treatmentI
   const treatmentEffectMatrix = Matrix.columnVector(effects);
   // transform observed treatment effects to those consistent with the NMA
   const consistentContrastEffects = H.mmul(treatmentEffectMatrix).getColumn(0);
-  // if CIs are ever needed:
-  //const consistentContrastCIs = consistentContrastEffects.map(e =>
-  //    _computeInferentialStatistics(e, Math.sqrt(e), width));
 
   // aggregated treatment effects
   const aggregatedTreatmentEffects = Matrix.zeros(nTreatments, nTreatments);
@@ -325,10 +342,32 @@ function _fixedEffectsNMA(effects, standardErrors, treatmentIndicesA, treatmentI
     }
   }
 
+  // computing tau for random effects
+  // i have little understanding of what's happening here - we just test it for correctness in transcription
+
+  const E = Matrix.zeros(m, m);
+  for (let i = 0; i < m; i++) {
+    for (let j = 0; j < m; j++) {
+      if (studies[i] === studies[j]) {
+        E.set(i, j, 1);
+      }
+    }
+  }
+  const df1 = _computeDF1(studies);
+  const df = df1 - (nTreatments - 1);
+  const v = Matrix.columnVector(effects);
+  const teDiff = Matrix.subtract(v, Matrix.columnVector(consistentContrastEffects));
+  const Q = teDiff.transpose().mmul(W).mmul(teDiff).get(0, 0);
+  const I = Matrix.identity(m, m);
+  const eMod = Matrix.multiply(BObserved.mmul(BObserved.transpose()), Matrix.divide(E, 2));
+  const computedTau2 = (Q - df) / Matrix.subtract(I, H).mmul(eMod).mmul(W).trace();
+  const tauComputed = Math.sqrt(Math.max(0, computedTau2));
+
   return {
     consistentContrastEffects: consistentContrastEffects,
     treatmentEffects: aggregatedTreatmentEffects,
     standardErrors: aggregatedStandardErrors,
+    tau: tauComputed,
   };
 }
 
@@ -341,7 +380,7 @@ function _fixedEffectsNMA(effects, standardErrors, treatmentIndicesA, treatmentI
  */
 function _computeNewSEs(r) {
   const nPairings = r.length;
-  const nStudyArms = (1 + Math.sqrt(8 * nPairings + 1)) / 2;
+  const nStudyArms = invertNChoose2(nPairings);
 
   const B = _buildAllPairwiseContrasts(nStudyArms);
   const Bt = B.transpose();
@@ -373,17 +412,18 @@ function _computeNewSEs(r) {
  * @param {Array<Number>} effectStandardErrors
  * @param {Array} treatmentsA treatment applied to the "numerator" in each contrast
  * @param {Array} treatmentsB treatment applied to the "denominator" in each contrast
- * @param {Array} studies a set of labels (one for each contrast), indicating which study the contrast occured in
+ * @param {Array} studies a set of labels (one for each contrast), indicating which study the contrast occurred in
+ * @param {Number} tau estimate of between study variance (random effects). 0 = fixed effects
  * @return {{treatmentIndicesB: Array<Number>, treatmentIndicesA: Array<Number>, orderedTreatments: Array, standardErrors: Array<Number>}}
  * @private
  */
-function _computePrerequisites(effectStandardErrors, treatmentsA, treatmentsB, studies) {
+function _computePrerequisites(effectStandardErrors, treatmentsA, treatmentsB, studies, tau=0) {
   // map treatments to unique indices, starting from 0
   const allTreatments = Array.from(_setUnion(treatmentsA, treatmentsB));
   const treatmentIndicesA = treatmentsA.map(trt => allTreatments.indexOf(trt));
   const treatmentIndicesB = treatmentsB.map(trt => allTreatments.indexOf(trt));
 
-  const perPairWeights = effectStandardErrors.map(se => 1 / Math.pow(se, 2));
+  const perPairWeights = effectStandardErrors.map(se => 1 / (Math.pow(se, 2) + Math.pow(tau, 2)));
   // TODO this loop is kind of slow, and could be replaced by a sort + linear scan
   // but that might provide confusing interfaces downstream
   Array.from(new Set(studies)).forEach(study => {
@@ -461,14 +501,15 @@ function _mergeComponentNMAResults(results) {
 
 /**
  *
- * @param studies
- * @param treatments
- * @param buildConstrasts {Function} a function taking an array of treatments, and an object with array attributes corresponding to the attributes in supplied `parameters`. it should compute contrasts on a single study
+ * @param studies {Array}
+ * @param treatments {Array}
+ * @param buildContrasts {Function} a function like _buildAllPairsORStatistics that generates pairs of arms implying treatment effects
  * @param parameters {Object} }an object with array attributes to be consumed by `buildContrasts`. arrays should share length for correct indexing
  * @param transformation {Function} maps effects computed in `buildContrasts` to a different space (typically one more interprettable)
+ * @param randomEffects {Boolean} whether or not random effects should be modeled
  * @return {NetworkMetaAnalysis}
  */
-function _generalizedNMA(studies, treatments, buildContrasts, parameters, transformation=(x) => x) {
+function _generalizedNMA(studies, treatments, buildContrasts, parameters, transformation, randomEffects=false) {
   if (studies.length === 0) {
     // https://github.com/mljs/matrix/issues/113 limits the API we can provide
     throw new Error('Must have 1 or more studies to perform an NMA');
@@ -524,11 +565,19 @@ function _generalizedNMA(studies, treatments, buildContrasts, parameters, transf
     }));
 
     const preprocessedData = _computePrerequisites(standardErrors, treatmentsA, treatmentsB, contrastStudies);
-    const nmaData = _fixedEffectsNMA(effects, preprocessedData.standardErrors, preprocessedData.treatmentIndicesA,
-      preprocessedData.treatmentIndicesB);
+    let nmaData = _NMA(effects, preprocessedData.standardErrors, preprocessedData.treatmentIndicesA,
+      preprocessedData.treatmentIndicesB, contrastStudies);
+    if (randomEffects) {
+      // with random effects, we are deriving tau from the fixed effects model - this amounts to a DerSimonian-Laird estimator
+      const tau = nmaData.tau;
+      // since we weight differently with tau, we need to recompute the "prerequisites"
+      const preprocessedRFData = _computePrerequisites(standardErrors, treatmentsA, treatmentsB, contrastStudies, tau);
+      nmaData = _NMA(effects, preprocessedRFData.standardErrors, preprocessedRFData.treatmentIndicesA,
+        preprocessedRFData.treatmentIndicesB, contrastStudies);
+    }
 
     return {
-      treatmentEffects:nmaData.treatmentEffects,
+      treatmentEffects: nmaData.treatmentEffects,
       standardErrors: nmaData.standardErrors,
       orderedTreatments: preprocessedData.orderedTreatments,
       studyLevelEffects,
@@ -543,8 +592,6 @@ function _generalizedNMA(studies, treatments, buildContrasts, parameters, transf
  * note all ORs are log (base e) transformed to get a symmetric sampling distribution
  *
  * @param {Array} treatments condition applied to each study arm
- * @param {Array<Number>} positiveCounts observed positive (numerator) outcomes in each study arm
- * @param {Array<Number>} totalCounts total number of units in each study arm
  * @param {Number} incr Anscombe correction, added to all cells (regardless of zero counts) as a bias correction
  */
 function _buildAllPairsORStatistics(treatments, params, incr = .5) {
@@ -590,7 +637,7 @@ function _buildAllPairsORStatistics(treatments, params, incr = .5) {
  * @param {Array<Number>} totalCounts
  * @private
  */
-function _fixedEffectsORNMAPreconditions(studies, treatments, positiveCounts, totalCounts) {
+function _ORNMAPreconditions(studies, treatments, positiveCounts, totalCounts) {
   if (studies.length !== treatments.length || studies.length !== positiveCounts.length ||
     studies.length !== totalCounts.length) {
     throw new Error(
@@ -608,10 +655,10 @@ function _fixedEffectsORNMAPreconditions(studies, treatments, positiveCounts, to
 }
 
 /**
- * Perform a fixed effects Network Meta-Analysis (NMA) on discrete, binomial outcomes, using an Odds Ratio (OR) as the
+ * Perform a Network Meta-Analysis (NMA) on discrete, binomial outcomes, using an Odds Ratio (OR) as the
  * basis of comparison. Note that fixed effects models assume that all studies sample from the same effects
  * distribution. This is often false in practice, due to different experimental designs, procedures, etc. However, fixed
- * effects can be desirable for their simplicity and increased power over alternatives (e.g. random effects).
+ * effects can be desirable in some cases for their simplicity and increased power over alternatives
  *
  * Input data is all array based (imagine arrays as columns of a table), with each "row" representing a study arm.
  *
@@ -619,15 +666,16 @@ function _fixedEffectsORNMAPreconditions(studies, treatments, positiveCounts, to
  * @param {Array} treatments the condition applied each arm of the study; can be any type, but must be unique
  * @param {Array<Number>} positiveCounts observed positive (numerator) outcomes in each study arm
  * @param {Array<Number>} totalCounts total number of units in each study arm
+ * @param {Boolean} randomEffects whether or not random effects should be modeled (using the DerSimonian-Laird estimator)
  * @return {NetworkMetaAnalysis}
  */
-function fixedEffectsOddsRatioNMA(studies, treatments, positiveCounts, totalCounts) {
-  _fixedEffectsORNMAPreconditions(studies, treatments, positiveCounts, totalCounts);
+function oddsRatioNMA(studies, treatments, positiveCounts, totalCounts, randomEffects=true) {
+  _ORNMAPreconditions(studies, treatments, positiveCounts, totalCounts);
 
   return _generalizedNMA(studies, treatments, _buildAllPairsORStatistics, {
     positiveCounts,
     totalCounts,
-  }, (x) => Math.exp(x));
+  }, (x) => Math.exp(x), randomEffects);
 }
 
 /**
@@ -640,7 +688,7 @@ function fixedEffectsOddsRatioNMA(studies, treatments, positiveCounts, totalCoun
  * @param {Array<Number>} standardDeviations
  * @private
  */
-function _fixedEffectsMDNMAPreconditions(studies, treatments, means, standardDeviations) {
+function _MDNMAPreconditions(studies, treatments, means, standardDeviations) {
   if (studies.length !== treatments.length || studies.length !== means.length ||
     studies.length !== standardDeviations.length) {
     throw new Error(
@@ -684,30 +732,31 @@ function _buildAllPairsMeanDifferenceStatistics(treatments, params) {
 }
 
 /**
- * Perform a fixed effects Network Meta-Analysis (NMA) on continuous outcomes, using a mean difference as the
+ * Perform a Network Meta-Analysis (NMA) on continuous outcomes, using a mean difference as the
  * basis of comparison. Note that fixed effects models assume that all studies sample from the same effects
  * distribution. This is often false in practice, due to different experimental designs, procedures, etc. However, fixed
- * effects can be desirable for their simplicity and increased power over alternatives (e.g. random effects).
+ * effects may be desirable for their simplicity and increased power over alternatives
  *
  * @param {Array} studies unique labels indicating the study an arm belongs to
  * @param {Array} treatments the condition applied each arm of the study; can be any type, but must be unique
  * @param {Array<Number>} means the measured mean of the outcome within the study arm
  * @param {Array<Number>} standardDeviations the measured standard deviation of the outcome within the study arm
  * @param {Array<Number>} experimentalUnits the number of units measured within the study arm
+ * @param {Boolean} randomEffects whether or not random effects should be modeled (using the DerSimonian-Laird estimator)
  * @return {NetworkMetaAnalysis}
  */
-function fixedEffectsMeanDifferenceNMA(studies, treatments, means, standardDeviations, experimentalUnits) {
-  _fixedEffectsMDNMAPreconditions(studies, treatments, means, standardDeviations);
+function meanDifferenceNMA(studies, treatments, means, standardDeviations, experimentalUnits, randomEffects=true) {
+  _MDNMAPreconditions(studies, treatments, means, standardDeviations);
 
   return _generalizedNMA(studies, treatments, _buildAllPairsMeanDifferenceStatistics, {
     means,
     standardDeviations,
     ns: experimentalUnits,
-  });
+  }, (x) => x, randomEffects);
 }
 
 module.exports = {
   NetworkMetaAnalysis,
-  fixedEffectsOddsRatioNMA: fixedEffectsOddsRatioNMA,
-  fixedEffectsMeanDifferenceNMA: fixedEffectsMeanDifferenceNMA,
+  oddsRatioNMA: oddsRatioNMA,
+  meanDifferenceNMA: meanDifferenceNMA,
 };

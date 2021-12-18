@@ -2,9 +2,9 @@
 Tools for meta-analytical statistics, including Network Meta-Analysis (NMA), in NodeJS
 
 ## Example
-An NMA on difference in means:
+A fixed effects NMA on difference in means:
 ```javascript
-const { fixedEffectsMeanDifferenceNMA } = require('shukra/nma');
+const { meanDifferenceNMA } = require('shukra/nma');
 
 const studies = [1, 1, 2, 2, 2, 3, 3];
 const trts = ['A', 'B', 'A', 'B', 'C', 'C', 'B'];
@@ -12,7 +12,7 @@ const means = [8, 10, 7, 10.5, 10.5, 10, 11];
 const sds = [4.92, 3.87, 3.25, 6.35, 6.66, 4.32, 4.30];
 const ns = [63, 45, 35, 44, 53, 75, 29];
 
-const nma = fixedEffectsMeanDifferenceNMA(studies, trts, means, sds, ns);
+const nma = meanDifferenceNMA(studies, trts, means, sds, ns, false);
 
 nma.getEffect('A', 'B');
 /*
@@ -28,11 +28,11 @@ nma.computeInferentialStatistics('A', 'B');
 }
 */   
 ```
-Computing a pooled mean using inverse variance weighting:
+Computing a pooled mean under random effects using inverse variance weighting:
 
 ```javascript
-const { randomEffectsPooledMean } = require('shukra/pooling');
-randomEffectsPooledMean(ns, means, sds);
+const { pooledMean } = require('shukra/pooling');
+pooledMean(ns, means, sds);
 /*
 {
   estimate: 9.493324459831722,
@@ -63,15 +63,19 @@ npm install --save https://github.com/holub008/shukra/tarball/master
 `shukra` is a web targeted meta-analytical statistics toolkit. It was specifically designed for simplicity & speed over 
  comprehensiveness (as in formal research publication); this means `shukra` can fit an NMA in the scope of a web request (<10 milliseconds). 
 
+`shukra` is developed for and by [Nested Knowledge](https://nested-knowledge.com/), but we welcome all users and contributions. 
+It is predominantly transcribed from the `meta` and `netmeta` packages, and carries their licenses. These packages are also
+used for verifying correctness (see `test/` for code samples).
+
 The feature set is growing, but currently offers several modules:
 
 * NMA (`shukra/nma`)
-    * Fixed effects models
+    * Random & Fixed effects models
     * Mean Difference (continuous outcomes) & Odds Ratios (binomial outcomes)
-    * Inferential statistics on effect size estimates
+    * Inferential statistics on effect size estimates and individual study point estimates
 * Pooling (`shukra/pooling`)
     * Inverse variance weighting
-    * Random effects models
+    * Random & Fixed effects models
     * Imputation of missing data
     * Inferential statistics on pooled estimates and individual study point estimates
 

@@ -1,6 +1,6 @@
 const assert = require('assert');
-const {NetworkMetaAnalysis, fixedEffectsOddsRatioNMA, fixedEffectsMeanDifferenceNMA} = require('../src/nma');
-const {Matrix} = require('ml-matrix');
+const { NetworkMetaAnalysis, oddsRatioNMA, meanDifferenceNMA } = require('../src/nma');
+const { Matrix } = require('ml-matrix');
 
 /**
  * tests for NMA module
@@ -47,20 +47,20 @@ describe('Odds Ratio FE NMA preconditions', function () {
   const totalCountGood = [140, 140, 138, 78, 85];
 
   it('succeeds with healthy data', function () {
-    const nma = fixedEffectsOddsRatioNMA(study, treatmentGood, positiveCountGood, totalCountGood);
+    const nma = oddsRatioNMA(study, treatmentGood, positiveCountGood, totalCountGood, false);
     assert.strictEqual(nma.getTreatments().length, 4);
   });
 
   it('should not produce a model for duplicate treatment arms', function () {
-    assert.throws(() => fixedEffectsOddsRatioNMA(study, treatmentBad, positiveCountGood, totalCountGood));
+    assert.throws(() => oddsRatioNMA(study, treatmentBad, positiveCountGood, totalCountGood, false));
   });
 
   it('should not produce a model for unequal input lengths', function () {
-    assert.throws(() => fixedEffectsOddsRatioNMA(study, treatmentGood, positiveCountGood, totalCountBad));
+    assert.throws(() => oddsRatioNMA(study, treatmentGood, positiveCountGood, totalCountBad, false));
   });
 
   it('should not produce a model for unequal input lengths', function () {
-    assert.throws(() => fixedEffectsOddsRatioNMA(study, treatmentGood, positiveCountBad, totalCountGood));
+    assert.throws(() => oddsRatioNMA(study, treatmentGood, positiveCountBad, totalCountGood, false));
   });
 });
 
@@ -68,6 +68,7 @@ describe('Odds Ratio FE NMA', function () {
   // data originates from:
   // Dias S, Welton NJ, Sutton AJ, Caldwell DM, Lu G and Ades AE (2013): Evidence Synthesis for Decision Making 4: Inconsistency in networks of evidence based on randomized controlled trials. Medical Decision Making, 33, 641–56
   /** generated with R code:
+   data(smokingcessation)
    sc <- smokingcessation %>% mutate_at(c('treat1', 'treat2', 'treat3'), as.character)
    long<- lapply(1:nrow(sc), function(ix) {
               row <- sc[ix,]
@@ -107,53 +108,103 @@ describe('Odds Ratio FE NMA', function () {
   const totalCount = [140, 140, 138, 78, 85, 170, 731, 714, 106, 205, 549, 1561, 33, 48, 100, 98, 31, 95, 39, 77,
     702, 694, 671, 535, 642, 761, 62, 90, 234, 237, 20, 20, 116, 149, 1107, 1031, 187, 504, 584, 675, 1177, 888, 49,
     43, 66, 127, 76, 74, 55, 26];
-  // note, these could just as well be integers
   const study = [1, 1, 1, 2, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13, 14, 14,
     15, 15, 16, 16, 17, 17, 18, 18, 19, 19, 20, 20, 21, 21, 22, 22, 23, 23, 24, 24];
 
-  const nma = fixedEffectsOddsRatioNMA(study, treatment, positiveCount, totalCount);
+  const nmaFE = oddsRatioNMA(study, treatment, positiveCount, totalCount, false);
+  const nmaRE = oddsRatioNMA(study, treatment, positiveCount, totalCount, true);
 
-  it('should produce reasonable effect size estimates', function () {
+
+  it('should produce reasonable fixed effects effect size estimates', function () {
     /** checked via the following R code:
      p2 <- pairwise(treat = list(treat1, treat2, treat3), event = list(event1, event2, event3),
      n = list(n1, n2, n3), data = smokingcessation, sm = "OR", addincr=TRUE)
      net2 <- netmeta(TE, seTE, treat1, treat2, studlab, data = p2, comb.fixed = TRUE, comb.random = FALSE)
      summary(net2)
      */
-    const ab = nma.getEffect("A", "B");
-    const ba = nma.getEffect("B", "A");
+    const ab = nmaFE.getEffect("A", "B");
+    const ba = nmaFE.getEffect("B", "A");
     assert.ok(ab > .81 && ab < .82);
     assert.ok(ba > 1.22 && ba < 1.23);
 
-    const aa = nma.getEffect("A", "A");
+    const aa = nmaFE.getEffect("A", "A");
     assert.ok(Math.abs(aa - 1) < .00001);
 
-    const db = nma.getEffect("D", "B");
+    const db = nmaFE.getEffect("D", "B");
     assert.ok(db > 1.64 && db < 1.65);
   });
 
-  it('should produce reasonable inferential statistics', function () {
-    const cb = nma.computeInferentialStatistics("C", "B", .95);
+  it('should produce reasonable random effects effect size estimates', function () {
+    /** checked via the following R code:
+     net2 <- netmeta(TE, seTE, treat1, treat2, studlab, data = p2, comb.fixed = FALSE, comb.random = TRUE)
+     summary(net2)
+     */
+    const ab = nmaRE.getEffect("A", "B");
+    const ba = nmaRE.getEffect("B", "A");
+
+    assert.ok(ba > 1.50 && ba < 1.51);
+    assert.ok(ab > 0.66 && ab < 0.67);
+
+    const aa = nmaRE.getEffect("A", "A");
+    assert.ok(Math.abs(aa - 1) < .00001);
+
+    const db = nmaRE.getEffect("D", "B");
+    assert.ok(db > 1.595 && db < 1.605);
+  });
+
+  it('should produce reasonable fixed effects inferential statistics', function () {
+    const cb = nmaFE.computeInferentialStatistics("C", "B", .95);
     assert.ok(cb.lower > 1.20 && cb.lower < 1.21);
     assert.ok(cb.upper > 2.02 && cb.upper < 2.03);
     assert.ok(cb.p < .01);
 
-    const ab = nma.computeInferentialStatistics("A", "B", .95);
+    const ab = nmaFE.computeInferentialStatistics("A", "B", .95);
     assert.ok(ab.lower > .635 && ab.lower < .645);
     assert.ok(ab.upper > 1.04 && ab.upper < 1.05);
     assert.ok(ab.p > .05);
 
-    const ab99 = nma.computeInferentialStatistics("A", 'B', .99);
+    const ab99 = nmaFE.computeInferentialStatistics("A", 'B', .99);
     assert.ok(ab.lower > ab99.lower && ab.upper < ab99.upper);
   });
 
-  it('should produce study level effects', function() {
-    const effectsA = nma.computeStudyLevelEffects('A');
+  it('should produce reasonable random effects inferential statistics', function () {
+    const ba = nmaRE.computeInferentialStatistics("B", "A", .95);
+    assert.ok(ba.lower > 0.73 && ba.lower < 0.74);
+    assert.ok(ba.upper > 3.06 && ba.upper < 3.07);
+    assert.ok(ba.p < 0.28 && ba.p > 0.25);
+  });
+
+  it('should produce fixed effects study level effects', function() {
+    const effectsA = nmaFE.computeStudyLevelEffects('A');
     /*
       sum(p2$treat1 == 'A')
      */
     assert.deepStrictEqual(effectsA.length, 20);
-    effectsA1C = effectsA.filter(({ study, treatment2 }) => study  === 1 && treatment2 === 'C');
+    const effectsA1C = effectsA.filter(({ study, treatment2 }) => study  === 1 && treatment2 === 'C');
+    assert.deepStrictEqual(effectsA1C.length, 1);
+    /*
+      effect <- exp(p2$TE[1]) # should match effect below (note these effects are anscambe corrected .5
+      log_effect <- p2$TE[1]
+      se <- p2$seTE[1]
+      error <- qnorm(0.975)*se
+      exp(c(log_effect - error, log_effect + error)) # should match lower,upper
+     */
+    assert.deepStrictEqual(effectsA1C[0], {
+      p: 0.01190387738868881,
+      lower: 0.16335387790814926,
+      upper: 0.7987415280874249,
+      effect:  0.36121673003802274,
+      comparisonN: 280,
+      treatment1: 'A',
+      treatment2: 'C',
+      study: 1
+    });
+  });
+
+  it('should produce random effects study level effects', function() {
+    const effectsA = nmaRE.computeStudyLevelEffects('A');
+    assert.deepStrictEqual(effectsA.length, 20);
+    const effectsA1C = effectsA.filter(({ study, treatment2 }) => study === 1 && treatment2 === 'C');
     assert.deepStrictEqual(effectsA1C.length, 1);
     /*
       effect <- exp(p2$TE[1]) # should match effect below (note these effects are anscambe corrected .5
@@ -175,7 +226,7 @@ describe('Odds Ratio FE NMA', function () {
   });
 });
 
-describe('Mean Difference FE NMA', function () {
+describe('Mean Difference NMA', function () {
   // this is a faux dataset
   const studies = ['A', 'A', 'B', 'B', 'B', 'C', 'C'];
   const trts = [1, 2, 1, 2, 3, 3, 2];
@@ -183,9 +234,10 @@ describe('Mean Difference FE NMA', function () {
   const sds = [4.923423, 3.867062, 3.250787, 6.349051, 6.664182, 4.324474, 4.301156];
   const ns = [63, 45, 35, 44, 53, 75, 29];
 
-  const nma = fixedEffectsMeanDifferenceNMA(studies, trts, means, sds, ns);
+  const nmaFE = meanDifferenceNMA(studies, trts, means, sds, ns, false);
+  const nmaRE = meanDifferenceNMA(studies, trts, means, sds, ns, true);
 
-  it('should produce reasonable effect size estimates', function () {
+  it('should produce reasonable fixed effects effect size estimates', function () {
     /** checked via the following R code
      set.seed(55414)
      data <- data.frame(
@@ -201,33 +253,57 @@ describe('Mean Difference FE NMA', function () {
      summary(net)
      */
 
-    const oneTwo = nma.getEffect(1, 2);
-    const twoOne = nma.getEffect(2, 1);
+    const oneTwo = nmaFE.getEffect(1, 2);
+    const twoOne = nmaFE.getEffect(2, 1);
 
     assert.ok(oneTwo < -2.818 && oneTwo > -2.819);
     assert.ok(twoOne > 2.818 && twoOne < 2.819);
 
-    const twoTwo = nma.getEffect(1, 1);
+    const twoTwo = nmaFE.getEffect(1, 1);
     assert.ok(Math.abs(twoTwo) < .00001);
 
-    const threeTwo = nma.getEffect(3, 2);
-    assert.ok(threeTwo < -0.312 && threeTwo > -0.313)
+    const threeTwo = nmaFE.getEffect(3, 2);
+    assert.ok(threeTwo < -0.312 && threeTwo > -0.313);
   });
 
-  it('should produce reasonable inferential statistics', function () {
-    const oneThree95 = nma.computeInferentialStatistics(1, 3, .95);
+  it('should produce reasonable random effects effect size estimates', function () {
+    /** checked via the following R code
+     net2 <- netmeta(p$TE, p$seTE, p$treat1, p$treat2, p$studlab, sm='MD', comb.fixed = FALSE, comb.random = TRUE)
+     summary(net2)
+     */
+
+    const oneTwo = nmaRE.getEffect(1, 2);
+
+    assert.ok(oneTwo > -2.848 && oneTwo < -2.847);
+
+    const twoTwo = nmaRE.getEffect(1, 1);
+    assert.ok(Math.abs(twoTwo) < .00001);
+
+    const threeTwo = nmaRE.getEffect(3, 2);
+    assert.ok(threeTwo > -0.308 && threeTwo < -0.307)
+  });
+
+  it('should produce reasonable fixed effects inferential statistics', function () {
+    const oneThree95 = nmaFE.computeInferentialStatistics(1, 3, .95);
     assert.ok(oneThree95.lower > -4.095 && oneThree95.lower < -4.09);
     assert.ok(oneThree95.upper > -0.918 && oneThree95.upper < -0.917);
     assert.ok(oneThree95.p < .05);
 
-    const twoThree95 = nma.computeInferentialStatistics(2, 3, .95);
+    const twoThree95 = nmaFE.computeInferentialStatistics(2, 3, .95);
     assert.ok(twoThree95.lower > -1.12 && twoThree95.lower < -1.11);
     assert.ok(twoThree95.upper > 1.735 && twoThree95.upper < 1.745);
     assert.ok(twoThree95.p > .05);
   });
 
+  it('should produce reasonable random effects inferential statistics', function () {
+    const oneThree95 = nmaRE.computeInferentialStatistics(1, 3, .95);
+    assert.ok(oneThree95.lower > -4.33 && oneThree95.lower < -4.32);
+    assert.ok(oneThree95.upper > -0.76 && oneThree95.upper < -0.75);
+    assert.ok(oneThree95.p < .05);
+  });
+
   it('should produce study level effects', function() {
-    const effects = nma.computeStudyLevelEffects(1);
+    const effects = nmaFE.computeStudyLevelEffects(1);
     assert.deepStrictEqual(effects.length, 3);
 
     /* verify with R code:
@@ -249,7 +325,7 @@ describe('Mean Difference FE NMA', function () {
       study: 'A'
     },);
 
-    const effects2 = nma.computeStudyLevelEffects(2);
+    const effects2 = nmaFE.computeStudyLevelEffects(2);
     assert.deepStrictEqual(effects2.length, 4);
     /* verify with R code:
       se <- p$seTE[5]
@@ -295,7 +371,7 @@ describe('Mean Difference FE NMA', function () {
     netrank(net, 'bad')
    */
   it('should produce valid SUCRA scores', function() {
-    const smallerBetterRanks = nma.computePScores(true)
+    const smallerBetterRanks = nmaFE.computePScores(true)
       .map((x) => {
         x.pScore = Math.round(x.pScore * 10000) / 10000;
         return x;
@@ -315,7 +391,7 @@ describe('Mean Difference FE NMA', function () {
       },
     ]);
 
-    const biggerBetterRanks = nma.computePScores(false)
+    const biggerBetterRanks = nmaFE.computePScores(false)
       .map((x) => {
         x.pScore = Math.round(x.pScore * 10000) / 10000;
         return x;
@@ -357,7 +433,7 @@ describe('single study NMA', function() {
   const total = [13, 20];
 
   it('should produce valid effects', function() {
-    const nma = fixedEffectsOddsRatioNMA(studies, treatments, positive, total);
+    const nma = oddsRatioNMA(studies, treatments, positive, total, false);
     assert.deepStrictEqual(nma.getEffect(1, 2), (10.5 / 3.5) / (12.5 / 8.5));
     assert.deepStrictEqual(nma.computeInferentialStatistics(1, 2, .95), {
         p: 0.3486138799297245,
@@ -394,18 +470,18 @@ describe('NMA Errors for degenerate inputs', function () {
   // shukra is already generous in taking (and ignoring) single arm studies- but if 0 contrasts are available,
   // absolutely nothing can be done
   it('should throw if 0 contrasts are present', function () {
-    assert.throws(() => fixedEffectsOddsRatioNMA(studies, treatments, positive, total));
+    assert.throws(() => oddsRatioNMA(studies, treatments, positive, total, false));
   });
 
   it('should not allow an empty NMA', function() {
-    assert.throws(() => fixedEffectsMeanDifferenceNMA([], [], [], [], []),
+    assert.throws(() => meanDifferenceNMA([], [], [], [], []),
       {
         message: 'Must have 1 or more studies to perform an NMA',
       });
   });
 
   it('should not allow unequal parameter lengths', function() {
-    assert.throws(() => fixedEffectsMeanDifferenceNMA([1], [1], [1, 2], [1], [1]),
+    assert.throws(() => meanDifferenceNMA([1], [1], [1, 2], [1], [1]),
       {
         message: 'Studies (n=1), treatments (n=1), means (n=2), and standard deviations (n=1) do not have the same length, as required.',
       }
@@ -421,7 +497,7 @@ describe('NMA for networks with disconnected components', function() {
   const sds = [4.923423, 3.867062, 3.250787, 6.349051, 6.664182, 4.324474, 4.301156, 5];
   const ns = [63, 45, 35, 44, 53, 75, 29, 100];
 
-  const nma = fixedEffectsMeanDifferenceNMA(studies, trts, means, sds, ns);
+  const nma = meanDifferenceNMA(studies, trts, means, sds, ns, false);
 
   it('should produce NaN effect estimates at isolated component contrasts', function() {
     assert.deepStrictEqual(nma.getEffect(1, 3), NaN);

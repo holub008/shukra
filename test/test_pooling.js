@@ -1,5 +1,5 @@
 const assert = require('assert');
-const {pooledMedian, randomEffectsPooledMean, randomEffectsPooledRate, pooledMean} = require('../src/pooling');
+const {pooledMedian, pooledMean, pooledRate, arithmeticPooledMean} = require('../src/pooling');
 
 function within(real, expected, epsilon=.01) {
   if ((isNaN(real) && !isNaN(expected)) || (!isNaN(real) && isNaN(expected))) {
@@ -26,12 +26,14 @@ describe('Random effects mean pooling', function () {
    sds <- c(1, 2, 2.4)
    ns <- c(1000, 50, 75)
    mm <- metamean(ns, means, sds)
+
+   mmf <- metamean(ns, means, sds, random=FALSE)
   */
   it('should produce correct results for full data', function () {
     const means = [10, 15, 20];
     const sds = [1, 2, 2.4];
     const ns = [1000, 50, 75];
-    const { estimate, lower, upper, studyEstimates } = randomEffectsPooledMean(ns, means, sds);
+    const { estimate, lower, upper, studyEstimates } = pooledMean(ns, means, sds);
     assert.ok(within(estimate, 14.996));
     assert.ok(within(lower, 8.643));
     assert.ok(within(upper, 21.35));
@@ -48,6 +50,11 @@ describe('Random effects mean pooling', function () {
     assert.ok(within(studyEstimates[2].estimate, 20));
     assert.ok(within(studyEstimates[2].lower, 19.457));
     assert.ok(within(studyEstimates[2].upper, 20.543));
+
+    const { estimate: fem, lower: fel, upper: feu } = pooledMean(ns, means, sds, false);
+    assert.ok(within(fem, 10.1879));
+    assert.ok(within(fel, 10.1267));
+    assert.ok(within(feu, 10.2491));
   });
 
   /*
@@ -57,13 +64,15 @@ describe('Random effects mean pooling', function () {
    means <- c(10, 15, 20)
    sds <- c(1, 1.7, 2.4)
    ns <- c(1000, 50, 75)
-   mm <- metamean(ns, means, sds)
+   mm <- metamean(ns, means, sds, random=TRUE)
+   mmfe <- metamean(ns, means, sds, random=FALSE)
+
   */
   it('should produce correct results with missing sds', function () {
     const means = [10, 15, 20];
     const sds = [1, undefined, 2.4];
     const ns = [1000, 50, 75];
-    const { estimate, lower, upper, studyEstimates } = randomEffectsPooledMean(ns, means, sds);
+    const { estimate, lower, upper, studyEstimates } = pooledMean(ns, means, sds);
     assert.ok(within(estimate, 14.996));
     assert.ok(within(lower, 8.955));
     assert.ok(within(upper, 21.036));
@@ -72,6 +81,11 @@ describe('Random effects mean pooling', function () {
     assert.ok(within(studyEstimates[1].estimate, 15));
     assert.ok(within(studyEstimates[1].lower, 14.528));
     assert.ok(within(studyEstimates[1].upper, 15.471));
+
+    const { estimate: fem, lower: fel, upper: feu } = pooledMean(ns, means, sds, false);
+    assert.ok(within(fem, 10.2103));
+    assert.ok(within(fel, 10.1493));
+    assert.ok(within(feu, 10.2714));
   });
 
   /*
@@ -85,7 +99,7 @@ describe('Random effects mean pooling', function () {
     const means = [10, -5, 20];
     const sds = [1, 2, 2.4];
     const ns = [1000, 50, 75];
-    const { estimate, lower, upper } = randomEffectsPooledMean(ns, means, sds);
+    const { estimate, lower, upper } = pooledMean(ns, means, sds);
     assert.ok(within(estimate, 8.3340));
     assert.ok(within(lower, -1.9188));
     assert.ok(within(upper, 18.5869));
@@ -96,51 +110,58 @@ describe('Random effects mean pooling', function () {
    means <- c(10)
    sds <- c(1)
    ns <- c(1000)
-   mm <- metamean(ns, means, sds)
+   metamean(ns, means, sds, random=TRUE)
+   metamean(ns, means, sds, random=FALSE)
+
   */
   it('should handle a single point estimate', function() {
     const means = [10];
     const sds = [1];
     const ns = [1000];
-    const { estimate, lower, upper } = randomEffectsPooledMean(ns, means, sds);
+    const { estimate, lower, upper } = pooledMean(ns, means, sds);
     assert.ok(within(estimate, 10));
     assert.ok(within(lower, 9.94));
     assert.ok(within(upper, 10.06));
+
+    const { estimate: fem, lower: fel, upper: feu } = pooledMean(ns, means, sds, false);
+    assert.ok(within(fem, 10));
+    assert.ok(within(fel, 9.94));
+    assert.ok(within(feu, 10.06));
   });
 
   it('should handle no point estimates', function() {
-    const x = randomEffectsPooledMean([], [], []);
+    const x = pooledMean([], [], []);
     assert.deepStrictEqual(x, {studyEstimates: []});
   });
 
   it('should throw on missing critical values', function() {
-    assert.throws(() => randomEffectsPooledMean([10, 20], [undefined, 100], [undefined, 5]),
+    assert.throws(() => pooledMean([10, 20], [undefined, 100], [undefined, 5]),
       {
         message: 'Element at index 0 is missing in mean'
       });
 
-    assert.throws(() => randomEffectsPooledMean([10, undefined], [110, 100], [undefined, 5]),
+    assert.throws(() => pooledMean([10, undefined], [110, 100], [undefined, 5]),
       {
         message: 'Element at index 1 is missing in n'
       });
   });
 
   it('should throw on negative sd', function() {
-    assert.throws(() => randomEffectsPooledMean([10, 20], [95, 100], [-1, 5]),
+    assert.throws(() => pooledMean([10, 20], [95, 100], [-1, 5]),
       {
         message: 'Element at index 0 is non-positive in sd'
       });
   });
 
   it('should throw on non-positive n', function() {
-    assert.throws(() => randomEffectsPooledMean([10, 20], [95, 100], [-1, 5]),
+    assert.throws(() => pooledMean([10, 20], [95, 100], [-1, 5]),
       {
         message: 'Element at index 0 is non-positive in sd'
       });
   });
 
   it('should throw on invalid width', function() {
-    assert.throws(() => randomEffectsPooledMean([10, 20], [95, 100], [1, 5], 95),
+    assert.throws(() => pooledMean([10, 20], [95, 100], [1, 5], true,95),
       {
         message: 'Value width not in range 0 to 1'
       });
@@ -151,30 +172,30 @@ describe('Arithmetic mean pooling', function () {
   it('should produce correct results for full data', function () {
     const means = [10, 15, 20];
     const ns = [10, 20, 100];
-    const { estimate } = pooledMean(ns, means);
+    const { estimate } = arithmeticPooledMean(ns, means);
     assert.ok(within(estimate,18.461));
   });
 
 
   it('should throw on missing critical values', function() {
-    assert.throws(() => pooledMean([10, 20], [undefined, 100]),
+    assert.throws(() => arithmeticPooledMean([10, 20], [undefined, 100]),
       {
         message: 'Element at index 0 is missing in mean'
       });
 
-    assert.throws(() => pooledMean([10, undefined], [110, 100]),
+    assert.throws(() => arithmeticPooledMean([10, undefined], [110, 100]),
       {
         message: 'Element at index 1 is missing in n'
       });
   });
 
   it('should handle no point estimates', function() {
-    const x = pooledMean([], []);
+    const x = arithmeticPooledMean([], []);
     assert.deepStrictEqual(x, {});
   });
 
   it('should handle a single point estimate', function() {
-    const { estimate } = pooledMean([10], [50]);
+    const { estimate } = arithmeticPooledMean([10], [50]);
     assert.strictEqual(estimate, 50);
   });
 });
@@ -185,19 +206,21 @@ describe('Random effects rate pooling', function () {
     library(meta)
     events_p  <- c(10, 15, 20, 24, 25, 39, 10)
     ns_p <- c(50, 65, 90,  100, 95, 150, 160)
-    mp_i <- metaprop(events_p, ns_p, method='Inverse')
+    metaprop(events_p, ns_p, method='Inverse')
+    metaprop(events_p, ns_p, method='Inverse', random=FALSE)
+    # exp() / (exp() + 1) of $TE give probabilities. CIs ($lower and $upper) are both already transformed
   */
   it('should produce correct results for full data', function () {
     const events = [10, 15, 20, 24, 25, 39, 10];
     const ns = [50, 65, 90,  100, 95, 150, 160];
-    const { estimate, lower, upper, studyEstimates } = randomEffectsPooledRate(ns, events);
+    const { estimate, lower, upper, studyEstimates } = pooledRate(ns, events);
     assert.ok(within(estimate, .204));
     assert.ok(within(lower, .15));
     assert.ok(within(upper, .27));
 
     assert.strictEqual(studyEstimates.length, 7);
     // note that since we are using a normal approximation over a beta, our CIs will be shifted left a bit more than is proper
-    // I believe that drives the difference ~1% differences in what `meta` is giving
+    // I believe that drives the ~1% differences in what `meta` is giving
     assert.ok(within(studyEstimates[0].estimate, .2));
     assert.ok(within(studyEstimates[0].lower, .09));
     assert.ok(within(studyEstimates[0].upper, .31));
@@ -205,6 +228,16 @@ describe('Random effects rate pooling', function () {
     assert.ok(within(studyEstimates[6].estimate, .0625));
     assert.ok(within(studyEstimates[6].lower, .0250));
     assert.ok(within(studyEstimates[6].upper, .100));
+
+    const { estimate: ef, lower: lf, upper: uf, studyEstimates: sef } = pooledRate(ns, events, false);
+    assert.ok(within(ef, .2187));
+    assert.ok(within(lf, .1885));
+    assert.ok(within(uf, .2523));
+
+    assert.strictEqual(sef.length, 7);
+    assert.ok(within(sef[0].estimate, .20));
+    assert.ok(within(sef[0].lower, .1003, .05));
+    assert.ok(within(sef[0].upper, .3371, .05));
   });
 
   /*
@@ -212,14 +245,20 @@ describe('Random effects rate pooling', function () {
     events_p  <- c(50, 20, 10, 0)
     ns_p <- c(100, 100, 50, 40)
     mp_i <- metaprop(events_p, ns_p, method='Inverse')
+    mp_if <- metaprop(events_p, ns_p, method='Inverse', random=FALSE)
   */
   it('should handle 0 event counts', function() {
     const events = [50, 20, 10, 0];
     const ns = [100, 100, 50, 40];
-    const { estimate, lower, upper } = randomEffectsPooledRate(ns, events);
-    assert.ok(within(estimate, .222));
-    assert.ok(within(lower, .090));
-    assert.ok(within(upper, .451));
+    const { estimate, lower, upper } = pooledRate(ns, events);
+    assert.ok(within(estimate, .207, .05));
+    assert.ok(within(lower, .0685, .05));
+    assert.ok(within(upper, .4809, .05));
+
+    const { estimate: fe, lower: fl, upper: fu } = pooledRate(ns, events, false);
+    assert.ok(within(fe, 0.3283, .05));
+    assert.ok(within(fl, .270, .05));
+    assert.ok(within(fu, .3923, .05));
   });
 
   /*
@@ -227,14 +266,20 @@ describe('Random effects rate pooling', function () {
     events_p  <- c(100, 85, 50, 30)
     ns_p <- c(100, 100, 50, 40)
     mp_i <- metaprop(events_p, ns_p, method='Inverse')
+    mp_if <- metaprop(events_p, ns_p, method='Inverse', random=FALSE)
   */
   it('should handle event = total counts', function() {
     const events = [100, 85, 50, 30];
     const ns = [100, 100, 50, 40];
-    const { estimate, lower, upper } = randomEffectsPooledRate(ns, events);
+    const { estimate, lower, upper } = pooledRate(ns, events);
     assert.ok(within(estimate, .913));
     assert.ok(within(lower, .756));
     assert.ok(within(upper, .972));
+
+    const { estimate: fe, lower: fl, upper: fu } = pooledRate(ns, events, false);
+    assert.ok(within(fe, 0.8403, .05));
+    assert.ok(within(fl, 0.7748, .05));
+    assert.ok(within(fu, 0.8895, .05));
   });
 
   /*
@@ -244,7 +289,7 @@ describe('Random effects rate pooling', function () {
     mp_i <- metaprop(events_p, ns_p, method='Inverse')
   */
   it('should handle a single point estimate', function() {
-    const { estimate, lower, upper} = randomEffectsPooledRate([100], [50]);
+    const { estimate, lower, upper} = pooledRate([100], [50]);
     assert.ok(within(estimate, .5));
     assert.ok(within(lower, .403));
     assert.ok(within(upper, .597));
@@ -255,49 +300,57 @@ describe('Random effects rate pooling', function () {
   events_p  <- c(5, 1)
   ns_p <- c(86, 24)
   mp_i <- metaprop(events_p, ns_p, method='Inverse')
+  mp_if <- metaprop(events_p, ns_p, method='Inverse', random=FALSE)
 
   this test case is useful for asserting that we cap our tau^2 estimator at 0
  */
   it('should handle a small number of observations', function() {
-    const { estimate, lower, upper} = randomEffectsPooledRate([86, 24], [5, 1]);
+    const ns = [86, 24];
+    const events = [5, 1];
+    const { estimate, lower, upper} = pooledRate(ns, events);
     assert.ok(within(estimate, .055));
     assert.ok(within(lower, .0249));
     assert.ok(within(upper, .117));
+
+    const { estimate: fe, lower: fl, upper: fu } = pooledRate(ns, events, false);
+    assert.ok(within(fe, 0.0550));
+    assert.ok(within(fl, 0.0249));
+    assert.ok(within(fu, 0.1170));
   });
 
   it('should handle no point estimates', function() {
-    const x = randomEffectsPooledRate([], []);
+    const x = pooledRate([], []);
     assert.deepStrictEqual(x, {studyEstimates: []})
   });
 
   it('should throw on missing critical values', function() {
-    assert.throws(() => randomEffectsPooledRate([10, 20], [5, undefined]),
+    assert.throws(() => pooledRate([10, 20], [5, undefined]),
       {
         message: 'Element at index 1 is missing in events',
       });
 
-    assert.throws(() => randomEffectsPooledRate([10, undefined], [5, 10]),
+    assert.throws(() => pooledRate([10, undefined], [5, 10]),
       {
         message: 'Element at index 1 is missing in n',
       });
   });
 
   it('should throw on event > n', function() {
-    assert.throws(() => randomEffectsPooledRate([10, 20], [9, 21]),
+    assert.throws(() => pooledRate([10, 20], [9, 21]),
       {
         message: 'event is greater than n at index 1',
       });
   });
 
   it('should throw on non-positive n', function() {
-    assert.throws(() => randomEffectsPooledRate([-10, 20], [-11, 9]),
+    assert.throws(() => pooledRate([-10, 20], [-11, 9]),
       {
         message: 'Element at index 0 is non-positive in n',
       });
   });
 
   it('should throw on 0 n', function() {
-    assert.throws(() => randomEffectsPooledRate([0, 20], [0, 9]),
+    assert.throws(() => pooledRate([0, 20], [0, 9]),
       {
         message: 'Element at index 0 is non-positive in n',
       });
