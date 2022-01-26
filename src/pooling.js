@@ -1,9 +1,9 @@
-const  distributions = require('distributions');
+const gaussian = require('gaussian');
 const { Matrix, inverse } = require('ml-matrix');
 const { sum, preconditionNotNull, preconditionLengthEquality, preconditionAllPositive, preconditionRange,
   weightedQuantile, weightedMean, logistic } = require('./util');
 
-const STD_NORMAL = distributions.Normal(0, 1);
+const STD_NORMAL = gaussian(0, 1);
 
 function crossProduct(A, B) {
   return A.transpose().mmul(B);
@@ -97,7 +97,7 @@ function pooledMean(n, mean, sd, randomEffects=true, width=.95) {
 
   const seTE  = sdImputed.map((sdi, ix) => Math.sqrt(Math.pow(sdi, 2) / n[ix]));
 
-  const z = STD_NORMAL.inv((1 - width) / 2)
+  const z = STD_NORMAL.ppf((1 - width) / 2)
   const studyTEs = mean.map((m, ix) => {
     const studySE = seTE[ix];
     // if we were using an exact distribution (a Beta dist, I believe), we wouldn't need limits on these
@@ -169,7 +169,7 @@ function pooledRate(n, events, randomEffects=true, width=.95) {
   const seTE = events.map((e, ix) => e && e !== n[ix] ? Math.sqrt(1 / e + 1 / (n[ix] - e)) : Math.sqrt(1 / (e + .5) + (1 / (n[ix] - e + .5))));
   // our reference `meta`, computes CIs using R's binom.test. that, in turn uses quantiles from the beta distribution
   // since that's a beast to compute, we opt for the simple normal approximation
-  const z = STD_NORMAL.inv((1 - width) / 2);
+  const z = STD_NORMAL.ppf((1 - width) / 2);
   const studyTEs = events.map((e, ix) => {
     const pointEstimate = e / n[ix];
     const studySE = Math.sqrt(pointEstimate * (1 - pointEstimate) / n[ix]);
@@ -253,7 +253,7 @@ function pooledMedian(n, median, width=.95) {
   }
 
   const observations = median.length
-  const quantile = Math.min(STD_NORMAL.inv(0.5 * width + 0.5) / (2 * Math.sqrt(observations)), .5);
+  const quantile = Math.min(STD_NORMAL.ppf(0.5 * width + 0.5) / (2 * Math.sqrt(observations)), .5);
   const quantiles = [0.5 - quantile, 0.5, 0.5 + quantile];
 
   // note that although the source paper normalizes the weights to sum to 1, it doesn't matter

@@ -190,9 +190,9 @@ describe('Odds Ratio FE NMA', function () {
       exp(c(log_effect - error, log_effect + error)) # should match lower,upper
      */
     assert.deepStrictEqual(effectsA1C[0], {
-      p: 0.01190387738868881,
-      lower: 0.16335387790814926,
-      upper: 0.7987415280874249,
+      p: 0.011903876743789787,
+      lower: 0.1633538803799905,
+      upper: 0.7987415160010132,
       effect:  0.36121673003802274,
       comparisonN: 280,
       treatment1: 'A',
@@ -214,10 +214,10 @@ describe('Odds Ratio FE NMA', function () {
       exp(c(log_effect - error, log_effect + error)) # should match lower,upper
      */
     assert.deepStrictEqual(effectsA1C[0], {
-      p: 0.01190387738868881,
-      lower: 0.16335387790814926,
-      upper: 0.7987415280874249,
-      effect:  0.36121673003802274,
+      p:  0.011903876743789787,
+      lower: 0.1633538803799905,
+      upper: 0.7987415160010132,
+      effect: 0.36121673003802274,
       comparisonN: 280,
       treatment1: 'A',
       treatment2: 'C',
@@ -315,9 +315,9 @@ describe('Mean Difference NMA', function () {
     const effectsA = effects.filter(({ study }) => study === 'A');
     assert.deepStrictEqual(effectsA.length, 1);
     assert.deepStrictEqual(effectsA[0],   {
-      p: 0.01818548988800539,
-      lower: -3.659706775608142,
-      upper: -0.34029322439185816,
+      p: 0.018185488496468505,
+      lower: -3.659706743960371,
+      upper: -0.340293256039629,
       effect: -2,
       comparisonN: 108,
       treatment1: 1,
@@ -336,9 +336,9 @@ describe('Mean Difference NMA', function () {
     const effects2C = effects2.filter(({ study }) => study === 'C');
     assert.deepStrictEqual(effects2C.length, 1);
     assert.deepStrictEqual(effects2C[0],   {
-        p: 0.2884067201816114,
-        lower: -0.8461952912275792,
-        upper: 2.846195291227579,
+        p: 0.28840673752917056,
+        lower: -0.8461952560237911,
+        upper: 2.8461952560237913,
         effect: 1,
         comparisonN: 104,
         treatment1: 2,
@@ -355,9 +355,9 @@ describe('Mean Difference NMA', function () {
     const effects2A = effects2.filter(({ study }) => study === 'A');
     assert.deepStrictEqual(effects2A.length, 1);
     assert.deepStrictEqual(effects2A[0],   {
-      p: 0.01818548988800539,
-      lower: 0.34029322439185816,
-      upper: 3.659706775608142,
+      p: 0.018185488496468505,
+      lower: 0.340293256039629,
+      upper: 3.659706743960371,
       effect: 2,
       comparisonN: 108,
       treatment1: 2,
@@ -436,16 +436,16 @@ describe('single study NMA', function() {
     const nma = oddsRatioNMA(studies, treatments, positive, total, false);
     assert.deepStrictEqual(nma.getEffect(1, 2), (10.5 / 3.5) / (12.5 / 8.5));
     assert.deepStrictEqual(nma.computeInferentialStatistics(1, 2, .95), {
-        p: 0.3486138799297245,
-        lower: 0.4593646265162551,
-        upper: 9.059469884655424
+        p: 0.3486138896968354,
+        lower: 0.45936463957514945,
+        upper: 9.05946962711131,
       }
     );
     assert.deepStrictEqual(nma.computeStudyLevelEffects(1,.95), [
         {
-          p: 0.34861387992972426,
-          lower: 0.4593646265162552,
-          upper: 9.059469884655424,
+          p: 0.34861388969683516,
+          lower: 0.45936463957514956,
+          upper: 9.059469627111307,
           effect: 2.04,
           treatment1: 1,
           treatment2: 2,
@@ -455,8 +455,8 @@ describe('single study NMA', function() {
       ]
     );
     assert.deepStrictEqual(nma.computePScores(true), [
-        { treatment: 2, pScore: 0.8256930600351378 },
-        { treatment: 1, pScore: 0.17430693996486224 }
+        { treatment: 2, pScore: 0.8256930551515823 },
+        { treatment: 1, pScore: 0.1743069448484177 }
       ]);
   });
 });
@@ -525,23 +525,23 @@ describe('NMA for networks with disconnected components', function() {
   it('should give valid effects for treatments in the same component', function() {
     assert.deepStrictEqual(nma.getEffect(1, 2), -2.5558296023438998);
     assert.deepStrictEqual(nma.computeInferentialStatistics(1, 2, .95), {
-      lower:  -3.872602646411969,
-      p: 0.00014223442580374446,
-      upper:  -1.2390565582758304,
+      lower: -3.872602621303358,
+      p: 0.000142234438276434,
+      upper: -1.2390565833844414,
     });
     // this is dubious math... since we have no evidence to do comparisons between e.g. 1 and 4, yet we rank them
     assert.deepStrictEqual(nma.computePScores(true), [
-        { treatment: 1, pScore: 0.9999288827870981 },
-        { treatment: 4, pScore: 0.866255268796531 },
-        { treatment: 3, pScore: 0.13374473120346897 },
-        { treatment: 2, pScore: 0.00007111721290187223 }
+        { treatment: 1, pScore: 0.9999288827808618 },
+        { treatment: 4, pScore: 0.866255259950658 },
+        { treatment: 3, pScore: 0.133744740049342 },
+        { treatment: 2, pScore: 0.000071117219138217 }
       ]);
 
     assert.deepStrictEqual(nma.computeStudyLevelEffects(1), [
         {
-          p: 0.01818548988800539,
-          lower: -3.659706775608142,
-          upper: -0.34029322439185816,
+          p: 0.018185488496468505,
+          lower: -3.659706743960371,
+          upper: -0.340293256039629,
           effect: -2,
           treatment1: 1,
           treatment2: 2,
@@ -549,9 +549,9 @@ describe('NMA for networks with disconnected components', function() {
           comparisonN: 108
         },
         {
-          p: 0.0015178470364287655,
-          lower: -5.663145441076081,
-          upper: -1.3368545589239198,
+          p: 0.0015178471200330002,
+          lower: -5.663145399828594,
+          upper: -1.3368546001714057,
           effect: -3.5,
           treatment1: 1,
           treatment2: 2,

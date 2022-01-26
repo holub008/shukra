@@ -1,8 +1,8 @@
 const {Matrix, inverse, pseudoInverse} = require('ml-matrix');
-const distributions = require('distributions');
+const gaussian = require('gaussian');
 const {getConnectedComponents} = require('./graph');
 
-const STD_NORMAL = distributions.Normal(0, 1);
+const STD_NORMAL = gaussian(0, 1);
 
 function invertNChoose2(x) {
   return (1 + Math.sqrt(8 * x + 1)) / 2;
@@ -82,8 +82,8 @@ function _buildAllPairwiseContrasts(nTreatments) {
  */
 function _computeInferentialStatistics(effect, standardError, transformation, width = .95, nullEffect = 0) {
   const alpha = 1 - width;
-  const lowerBound = effect - STD_NORMAL.inv(1 - alpha / 2) * standardError;
-  const upperBound = effect + STD_NORMAL.inv(1 - alpha / 2) * standardError;
+  const lowerBound = effect - STD_NORMAL.ppf(1 - alpha / 2) * standardError;
+  const upperBound = effect + STD_NORMAL.ppf(1 - alpha / 2) * standardError;
   const z = (effect - nullEffect) / standardError;
   const p = 2 * (1 - STD_NORMAL.cdf(Math.abs(z)));
 
