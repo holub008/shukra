@@ -33,7 +33,7 @@
   "author": "Karl Holub <karljholub@gmail.com>",
   "license": "GPL-2.0-or-later",
   "dependencies": {
-    "distributions": "^2.1.0",
+    "gaussian": "^1.2.0",
     "ml-matrix": "^6.5.3"
   },
   "directories": {
