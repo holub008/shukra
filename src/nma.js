@@ -273,12 +273,22 @@ class NetworkMetaAnalysis {
   }
 
   /**
-   * get "comparison adjusted" effects and standard errors, expected to be used in a comparison-adjusted funnel plot
+   * get "comparison adjusted" study-level effects and standard errors, expected to be used in a comparison-adjusted funnel plot
    * Chaimani A & Salanti G (2012): Using network meta-analysis to evaluate the existence of small-study effects in a network of interventions. Research Synthesis Methods, 3, 161–76
    * @param treatment the baseline of comparison used for generating effects
-   * @return {Array} study level effects. objects in the array will have `study`, `treatment1` (always = input treatment), `treatment2`, `effect`, `standardError`
+   * @param level {Number} confidence level [0-1] determining width of the funnel boundaries
+   * @return an object with properties:
+   *   `studies`, which has properties:
+   *       `study`
+   *       `treatment1`
+   *       `treatment2`  (= param treatment)
+   *       `effect`,
+   *       `se`
+   *   `equivalence` (an x point)
+   *   `leftFunnel` (array of [x, y])
+   *   `rightFunnel` (array of [x, y])
    */
-  computeComparisonAdjustedEffects(treatment) {
+  computeComparisonAdjustedEffects(treatment, level=0.95) {
 
   }
 

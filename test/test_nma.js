@@ -248,6 +248,29 @@ describe('Odds Ratio FE NMA', function () {
     const fis = nmaFE.computeISquared();
     assert.deepStrictEqual(fis, ris);
   });
+
+  it('should compute accurate comparison adjusted', function() {
+    /*
+      r <- funnel(net2, order='B', studlab=T, level=.99)
+      library(jsonlite)
+      r %>%
+        mutate(
+          study = studlab,
+          treatment1 = treat1,
+          treatment2 = treat2,
+          effect = exp(TE.adj),
+          se = seTE
+        ) %>%
+        select(study, treatment1, treatment2, effect, se) %>%
+        arrange(study, treatment1) %>%
+        toJSON()
+     */
+    const { studies, equivalence, leftFunnel, rightFunnel } = nmaFE.computeComparisonAdjustedEffects('B');
+    const orderedStudies = studies
+      .sorted((a, b) => a.study > b.study ? 1 : 0)
+      .sorted((a, b) => a.treatment1 > b.treatment1 ? 1 : 0);
+    assert.deepStrictEqual(orderedStudies, [{"study":"10","treatment1":"A","treatment2":"B","effect":1.1614,"se":0.1694},{"study":"11","treatment1":"A","treatment2":"B","effect":0.7744,"se":0.3226},{"study":"16","treatment1":"A","treatment2":"B","effect":0.5993,"se":0.4311},{"study":"2","treatment1":"C","treatment2":"B","effect":1.0785,"se":0.442},{"study":"2","treatment1":"D","treatment2":"B","effect":0.7132,"se":0.3778},{"study":"21","treatment1":"C","treatment2":"B","effect":0.9329,"se":0.4238},{"study":"22","treatment1":"D","treatment2":"B","effect":1.5734,"se":0.4375}]])
+  });
 });
 
 describe('Mean Difference NMA', function () {
