@@ -11,7 +11,7 @@ describe('NMA Holder Class', function () {
   const se = new Matrix([[0, 2], [2, 0]]);
   const trtLabel = ['Band-aid', 'Stitch'];
   const stubStudyLevelEffects = [];
-  const meanDiffNMA = new NetworkMetaAnalysis(trt, se, trtLabel, stubStudyLevelEffects);
+  const meanDiffNMA = new NetworkMetaAnalysis(trt, se, trtLabel, stubStudyLevelEffects, (x) => x, 202.3334, 23);
 
   it('should echo treatment effect', function () {
     assert.strictEqual(meanDiffNMA.getEffect('Band-aid', 'Stitch'), 5);
@@ -34,6 +34,19 @@ describe('NMA Holder Class', function () {
     assert.throws(() => meanDiffNMA.getEffect("Super glue", "Stitch"));
     assert.throws(() =>
       meanDiffNMA.computeInferentialStatistics("Stitch", "Super glue", .95));
+  });
+
+  it('should report correct heterogeneity stats', function() {
+    /** checked via the following R code:
+     p2 <- pairwise(treat = list(treat1, treat2, treat3), event = list(event1, event2, event3),
+     n = list(n1, n2, n3), data = smokingcessation, sm = "OR", addincr=TRUE)
+     net2 <- netmeta(TE, seTE, treat1, treat2, studlab, data = p2, comb.fixed = TRUE, comb.random = FALSE)
+     c(net2$I2, net2$lower.I2, net2$upper.I2)
+     */
+    const i2Stats = meanDiffNMA.computeISquared()
+    assert.ok(i2Stats.i2 > 0.886 && i2Stats.i2 < 0.887);
+    assert.ok(i2Stats.lower > 0.843 && i2Stats.lower < 0.844);
+    assert.ok(i2Stats.upper > 0.917 && i2Stats.upper < 0.918);
   });
 });
 
@@ -224,6 +237,17 @@ describe('Odds Ratio FE NMA', function () {
       study: 1
     });
   });
+
+  it('should produce valid heterogeneity statistics', function () {
+    const ris = nmaRE.computeISquared()
+    assert.deepStrictEqual(ris, {
+      i2: 0.8863262063832255,
+      lower: 0.8437926735418156,
+      upper: 0.9172783271552367,
+    });
+    const fis = nmaFE.computeISquared();
+    assert.deepStrictEqual(fis, ris);
+  });
 });
 
 describe('Mean Difference NMA', function () {
@@ -410,7 +434,16 @@ describe('Mean Difference NMA', function () {
         pScore: 0.0005,
       },
     ]);
-  })
+  });
+
+  /** test by checking I2, lower.I2, upper.I2 properties of the model */
+  it('should produce valid heterogeneity statistics', function() {
+    assert.deepStrictEqual(nmaFE.computeISquared(), {
+      i2: 0.19595891881666125,
+      lower: 0,
+      upper: 0.9163635910636153,
+    })
+  });
 });
 
 /*

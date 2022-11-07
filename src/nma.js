@@ -98,6 +98,42 @@ function coalesceNumeric(x) {
   return Number.isNaN(x) ? 0 : x;
 }
 
+// for reference: https://github.com/guido-s/netmeta/blob/257630f656d90e0d21b5ab4715c05ec29947c637/R/meta-het.R#L53
+function _computeISquared(q, df, width) {
+  if (df === 0) {
+    return undefined;
+  }
+
+  const backTransform = (x) => (Math.pow(x, 2) - 1) / Math.pow(x, 2);
+
+  const k = df + 1;
+  const H = Math.sqrt(q / df)
+  let selogH;
+  if (q > k) {
+    if (k >= 2) {
+      selogH = 0.5 * (Math.log(q) - Math.log(k - 1)) / (Math.sqrt(2 * q) - Math.sqrt(2 * k - 3));
+    }
+  } else {
+    if (k > 2) {
+      selogH = Math.sqrt(1 / (2 * (k - 2)) * (1 - 1 / (3 * Math.pow(k - 2, 2))));
+    }
+  }
+
+  if (!selogH) {
+    return {
+      i2: backTransform(Math.max(H, 1)),
+    };
+  }
+
+  const logH = Math.log(Math.max(H, 1));
+  const infer = _computeInferentialStatistics(logH, selogH, (x) => Math.exp(x), width);
+  return {
+    i2: backTransform(Math.max(H, 1)),
+    lower: backTransform(Math.max(infer.lower, 1)),
+    upper: backTransform(Math.max(infer.upper, 1)),
+  };
+}
+
 /**
  * a holder of the results of the NMA
  */
@@ -108,13 +144,17 @@ class NetworkMetaAnalysis {
    * @param {Array} orderedTreatments the list of unique treatments corresponding to row and column indices
    * @param {Array} studyLevelEffects an array of objects with attributes `study`, `treatment1`, `treatment2`, `effect`, `se`,  `comparisonN`
    * @param {Function} transformation a function applied to all treatment effects (e.g. if effects are on log scale)
+   * @param q {Number} cochrane's Q derived from effects
+   * @param dfQ {Number} degrees of freedom in computing cochrane's Q
    * @param {Function} inversion a function applied to treatment effects that must be changed in direction (e.g. if an effect is for A vs. B, inversion gives B vs. A)
    */
   constructor(aggregatedTreatmentEffects,
               aggregatedStandardErrors,
               orderedTreatments,
               studyLevelEffects,
-              transformation = (x) => x,
+              transformation,
+              q,
+              dfQ,
               inversion = (x) => -x) {
     this._treatmentEffects = aggregatedTreatmentEffects;
     this._standardErrors = aggregatedStandardErrors;
@@ -122,6 +162,8 @@ class NetworkMetaAnalysis {
     this._studyLevelEffects = studyLevelEffects;
     this._transformation = transformation;
     this._inversion = inversion;
+    this._q = q;
+    this._dfQ = dfQ
   }
 
   /**
@@ -228,6 +270,25 @@ class NetworkMetaAnalysis {
       inferentialStats.comparisonN = e.comparisonN;
       return inferentialStats;
     });
+  }
+
+  /**
+   * get "comparison adjusted" effects and standard errors, expected to be used in a comparison-adjusted funnel plot
+   * Chaimani A & Salanti G (2012): Using network meta-analysis to evaluate the existence of small-study effects in a network of interventions. Research Synthesis Methods, 3, 161–76
+   * @param treatment the baseline of comparison used for generating effects
+   * @return {Array} study level effects. objects in the array will have `study`, `treatment1` (always = input treatment), `treatment2`, `effect`, `standardError`
+   */
+  computeComparisonAdjustedEffects(treatment) {
+
+  }
+
+  /**
+   * compute I^2, and its confidence interval on the entire network
+   * @param width the confidence interval width [0-1]
+   * @return an object with properties `i2`, `lower` (optional, insufficient data), `upper` (optional). or, undefined if there is insufficient comparisons
+   */
+  computeISquared(width=0.95) {
+    return _computeISquared(this._q, this._dfQ, width);
   }
 }
 
@@ -368,6 +429,8 @@ function _NMA(effects, standardErrors, treatmentIndicesA, treatmentIndicesB, stu
     treatmentEffects: aggregatedTreatmentEffects,
     standardErrors: aggregatedStandardErrors,
     tau: tauComputed,
+    q: Q,
+    dfQ: df,
   };
 }
 
@@ -472,6 +535,9 @@ function _mergeComponentNMAResults(results) {
   let orderedTreatments = results[0].orderedTreatments;
   let studyLevelEffects = results[0].studyLevelEffects;
 
+  let q = results[0].q;
+  let df = results[0].dfQ;
+
   results.slice(1).forEach((r) => {
     orderedTreatments = orderedTreatments.concat(r.orderedTreatments);
     studyLevelEffects = studyLevelEffects.concat(r.studyLevelEffects);
@@ -489,6 +555,9 @@ function _mergeComponentNMAResults(results) {
     newStandardErrors.setSubMatrix(standardErrors, 0, 0);
     newStandardErrors.setSubMatrix(r.standardErrors, standardErrors.rows, standardErrors.columns);
     standardErrors = newStandardErrors;
+
+    q += r.q;
+    df += r.dfQ;
   });
 
   return {
@@ -496,6 +565,8 @@ function _mergeComponentNMAResults(results) {
     standardErrors,
     orderedTreatments,
     studyLevelEffects,
+    q,
+    dfQ: df,
   };
 }
 
@@ -567,6 +638,9 @@ function _generalizedNMA(studies, treatments, buildContrasts, parameters, transf
     const preprocessedData = _computePrerequisites(standardErrors, treatmentsA, treatmentsB, contrastStudies);
     let nmaData = _NMA(effects, preprocessedData.standardErrors, preprocessedData.treatmentIndicesA,
       preprocessedData.treatmentIndicesB, contrastStudies);
+    const q = nmaData.q;
+    const dfQ = nmaData.dfQ;
+
     if (randomEffects) {
       // with random effects, we are deriving tau from the fixed effects model - this amounts to a DerSimonian-Laird estimator
       const tau = nmaData.tau;
@@ -581,11 +655,13 @@ function _generalizedNMA(studies, treatments, buildContrasts, parameters, transf
       standardErrors: nmaData.standardErrors,
       orderedTreatments: preprocessedData.orderedTreatments,
       studyLevelEffects,
+      q,
+      dfQ,
     };
   });
 
-  const { treatmentEffects, standardErrors, orderedTreatments, studyLevelEffects } = _mergeComponentNMAResults(componentResults);
-  return new NetworkMetaAnalysis(treatmentEffects, standardErrors, orderedTreatments, studyLevelEffects, transformation);
+  const { treatmentEffects, standardErrors, orderedTreatments, studyLevelEffects, q, dfQ } = _mergeComponentNMAResults(componentResults);
+  return new NetworkMetaAnalysis(treatmentEffects, standardErrors, orderedTreatments, studyLevelEffects, transformation, q, dfQ);
 }
 
 /**
