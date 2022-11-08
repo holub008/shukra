@@ -149,8 +149,8 @@ describe('Odds Ratio FE NMA', function () {
 
   it('should produce reasonable random effects effect size estimates', function () {
     /** checked via the following R code:
-     net2 <- netmeta(TE, seTE, treat1, treat2, studlab, data = p2, comb.fixed = FALSE, comb.random = TRUE)
-     summary(net2)
+     net1 <- netmeta(TE, seTE, treat1, treat2, studlab, data = p2, comb.fixed = FALSE, comb.random = TRUE)
+     summary(net1)
      */
     const ab = nmaRE.getEffect("A", "B");
     const ba = nmaRE.getEffect("B", "A");
@@ -250,26 +250,56 @@ describe('Odds Ratio FE NMA', function () {
   });
 
   it('should compute accurate comparison adjusted', function() {
-    /*
+    /* checked with R code (!note, effects will differ a bit due to using indirect evidence in the adjustment calculation)
       r <- funnel(net2, order='B', studlab=T, level=.99)
       library(jsonlite)
       r %>%
         mutate(
           study = studlab,
-          treatment1 = treat1,
-          treatment2 = treat2,
+          treatment1 = treat2,
+          treatment2 = treat1,
           effect = exp(TE.adj),
-          se = seTE
+          se = seTE,
+          study = as.integer(study)
         ) %>%
         select(study, treatment1, treatment2, effect, se) %>%
         arrange(study, treatment1) %>%
         toJSON()
      */
-    const { studies, equivalence, leftFunnel, rightFunnel } = nmaFE.computeComparisonAdjustedEffects('B');
-    const orderedStudies = studies
-      .sorted((a, b) => a.study > b.study ? 1 : 0)
-      .sorted((a, b) => a.treatment1 > b.treatment1 ? 1 : 0);
-    assert.deepStrictEqual(orderedStudies, [{"study":"10","treatment1":"A","treatment2":"B","effect":1.1614,"se":0.1694},{"study":"11","treatment1":"A","treatment2":"B","effect":0.7744,"se":0.3226},{"study":"16","treatment1":"A","treatment2":"B","effect":0.5993,"se":0.4311},{"study":"2","treatment1":"C","treatment2":"B","effect":1.0785,"se":0.442},{"study":"2","treatment1":"D","treatment2":"B","effect":0.7132,"se":0.3778},{"study":"21","treatment1":"C","treatment2":"B","effect":0.9329,"se":0.4238},{"study":"22","treatment1":"D","treatment2":"B","effect":1.5734,"se":0.4375}]])
+    const { effects, leftFunnel, rightFunnel } = nmaFE.computeComparisonAdjustedEffects('B');
+    const orderedStudies = effects
+      .sort((a, b) => a.treatment2 < b.treatment2 ? -1 : 1)
+      .sort((a, b) => a.study < b.study ? -1 : 1);
+    // this has been changed from netmeta: https://github.com/guido-s/netmeta/issues/11
+    assert.deepStrictEqual(orderedStudies, [
+      {"study":2,"treatment1":"B","treatment2":"C","effect":0.6395259758462293,"se":0.44201445534146955},
+      {"study":2,"treatment1":"B","treatment2":"D","effect":0.7422349294922779,"se":0.3778052136324726},
+      {"study":10,"treatment1":"B","treatment2":"A","effect":1.2422745360612997,"se":0.16942586755039812},
+      {"study":11,"treatment1":"B","treatment2":"A","effect":0.8283706607044433,"se":0.32255160585540343},
+      {"study":16,"treatment1":"B","treatment2":"A","effect":0.641086661173091,"se":0.4310551417352239},
+      {"study":21,"treatment1":"B","treatment2":"C","effect":0.5531577328382871,"se":0.4238496075960444},
+      {"study":22,"treatment1":"B","treatment2":"D","effect":1.6375914850930329,"se":0.43747056012961766}
+    ]);
+
+    assert.deepStrictEqual(leftFunnel.length, 500);
+    // strictly decreasing in effect size
+    assert.deepStrictEqual(leftFunnel, leftFunnel.sort((a, b) => a[0] > b[0] ? -1 : 1))
+    // strictly increasing in SE
+    assert.deepStrictEqual(leftFunnel, leftFunnel.sort((a, b) => a[1] > b[1] ? 1 : -1))
+    // exp(ci(log(1), .44201445534146955, .95)$lower)
+    // where .442014 is our max SE
+    assert.deepStrictEqual(leftFunnel[leftFunnel.length - 1],  [0.4204909185483156, 0.44201445534146955]);
+    assert.deepStrictEqual(leftFunnel[0],  [1, 0]);
+
+    assert.deepStrictEqual(rightFunnel.length, 500);
+    // strictly decreasing in effect size
+    assert.deepStrictEqual(rightFunnel, rightFunnel.sort((a, b) => a[0] > b[0] ? -1 : 1))
+    // strictly increasing in SE
+    assert.deepStrictEqual(rightFunnel, rightFunnel.sort((a, b) => a[1] > b[1] ? 1 : -1))
+    // exp(ci(log(1), .44201445534146955, .95)$upper)
+    // where .442014 is our max SE
+    assert.deepStrictEqual(rightFunnel[rightFunnel.length - 1],  [2.3781726450891165, 0.44201445534146955]);
+    assert.deepStrictEqual(rightFunnel[0],  [1, 0]);
   });
 });
 

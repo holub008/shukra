@@ -239,6 +239,26 @@ class NetworkMetaAnalysis {
     return result;
   }
 
+  _getRawStudyLevelEffects(forTreatment) {
+    const directionalEffects = this._studyLevelEffects
+      .filter(({treatment1}) => treatment1 === forTreatment);
+    const invertedEffects = this._studyLevelEffects
+      .filter(({treatment2}) => treatment2 === forTreatment)
+      .map((e)  => {
+        const eCopy = { ...e };
+        // since we're operating on standardized values, the inversion function is appropriately applied here
+        eCopy.effect = this._inversion(e.effect);
+        const trt1 = eCopy.treatment1;
+        eCopy.treatment1 = eCopy.treatment2;
+        eCopy.treatment2 = trt1;
+        eCopy.se = e.se;
+        return eCopy;
+      });
+
+    return [...directionalEffects, ...invertedEffects]
+  }
+
+
   /**
    * get the (direct) effects and inferential statistics from individual studies feeding into the pooled estimates
    * inferentials are built on normal approximations
@@ -247,21 +267,7 @@ class NetworkMetaAnalysis {
    * @return {Array} study level effects. objects in the array will have `study`, `treatment1`, `treatment2`, `effect`, `lower`, `upper`, `p`, `comparisonN`
    */
   computeStudyLevelEffects(treatment, width=.95) {
-    const directionalEffects = this._studyLevelEffects
-      .filter(({treatment1}) => treatment1 === treatment);
-    const invertedEffects = this._studyLevelEffects
-      .filter(({treatment2}) => treatment2 === treatment)
-      .map((e)  => {
-        const eCopy = { ...e };
-        // since we're operating on standardized values, the inversion function is appropriately applied here
-        eCopy.effect = this._inversion(e.effect);
-        const trt1 = eCopy.treatment1;
-        eCopy.treatment1 = eCopy.treatment2;
-        eCopy.treatment2 = trt1;
-        return eCopy;
-      });
-
-    return [...directionalEffects, ...invertedEffects].map((e) => {
+    return this._getRawStudyLevelEffects(treatment).map((e) => {
       const inferentialStats = _computeInferentialStatistics(e.effect, e.se, this._transformation, width);
       inferentialStats.effect = this._transformation(e.effect); // with inferentials done, we convert to orig scale
       inferentialStats.treatment1 = e.treatment1;
@@ -274,22 +280,58 @@ class NetworkMetaAnalysis {
 
   /**
    * get "comparison adjusted" study-level effects and standard errors, expected to be used in a comparison-adjusted funnel plot
-   * Chaimani A & Salanti G (2012): Using network meta-analysis to evaluate the existence of small-study effects in a network of interventions. Research Synthesis Methods, 3, 161–76
+   * Chaimani 2013: https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3789683/
    * @param treatment the baseline of comparison used for generating effects
    * @param level {Number} confidence level [0-1] determining width of the funnel boundaries
    * @return an object with properties:
-   *   `studies`, which has properties:
+   *   `effects`, which has properties:
    *       `study`
-   *       `treatment1`
-   *       `treatment2`  (= param treatment)
+   *       `treatment1` (= param treatment)
+   *       `treatment2`
    *       `effect`,
    *       `se`
-   *   `equivalence` (an x point)
-   *   `leftFunnel` (array of [x, y])
-   *   `rightFunnel` (array of [x, y])
+   *   `leftFunnel` (array of [x, y] points that can be linearly interpolated)
+   *   `rightFunnel` (array of [x, y] points that can be linearly interpolated)
+   * or undefined, if there is no data for the treatment
    */
   computeComparisonAdjustedEffects(treatment, level=0.95) {
+    const equivalenceEffect = 0;
 
+    const studyLevelEffects = this._getRawStudyLevelEffects(treatment);
+    if (!studyLevelEffects.length) {
+      return undefined;
+    }
+
+    const maxSE = Math.max(...studyLevelEffects.map(({ se }) => se));
+    const funnelPoints = 500;
+    const leftFunnel = [];
+    const rightFunnel = [];
+    for (let i = 0; i < funnelPoints; i++) {
+      const seIter = maxSE * (i / (funnelPoints - 1));
+      const bounds = _computeInferentialStatistics(equivalenceEffect, seIter, this._transformation, level);
+      leftFunnel.push([bounds.lower, seIter]);
+      rightFunnel.push([bounds.upper, seIter]);
+    }
+
+    const adjustedEffects = studyLevelEffects.map((sl) => {
+      const ti = this._treatments.indexOf(sl.treatment1);
+      const tj = this._treatments.indexOf(sl.treatment2);
+      // this is a divergence from netmeta: https://github.com/guido-s/netmeta/issues/11
+      // here, we include indirect evidence in calculating the adjustment
+      const modeledEffect = this._treatmentEffects.get(ti, tj);
+
+      const slCopy = {...sl};
+      delete slCopy.comparisonN;
+      // because we will be displaying effects with input `treatment` as the baseline, we invert the effects
+      slCopy.effect = this._transformation(this._inversion(sl.effect) - this._inversion(modeledEffect));
+      return slCopy;
+    });
+
+    return ({
+      effects: adjustedEffects,
+      leftFunnel,
+      rightFunnel,
+    });
   }
 
   /**
