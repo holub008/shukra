@@ -1,6 +1,7 @@
 const {Matrix, inverse, pseudoInverse} = require('ml-matrix');
 const gaussian = require('gaussian');
 const {getConnectedComponents} = require('./graph');
+const {linearRegression} = require("./util");
 
 const STD_NORMAL = gaussian(0, 1);
 
@@ -134,6 +135,16 @@ function _computeISquared(q, df, width) {
   };
 }
 
+// an enum-like set of statistics used in measuring effects that are acceptable for NMA
+const ComparisonStatistic = {
+  OR: {
+    transform: (x) => Math.exp(x),
+  },
+  MD: {
+    transform: (x) => x,
+  },
+};
+
 /**
  * a holder of the results of the NMA
  */
@@ -142,26 +153,25 @@ class NetworkMetaAnalysis {
    * @param {Matrix} aggregatedTreatmentEffects a square matrix with treatment effects
    * @param {Matrix} aggregatedStandardErrors a square matrix with effect standard errors
    * @param {Array} orderedTreatments the list of unique treatments corresponding to row and column indices
-   * @param {Array} studyLevelEffects an array of objects with attributes `study`, `treatment1`, `treatment2`, `effect`, `se`,  `comparisonN`
-   * @param {Function} transformation a function applied to all treatment effects (e.g. if effects are on log scale)
+   * @param {Array} studyLevelEffects an array of objects with attributes `study`, `treatment1`, `treatment2`, `effect`, `se`,  `comparisonN`, `raw`
+   * @param {Object} comparison one of the `ComparisonStatistic`s that effects were generated for
    * @param q {Number} cochrane's Q derived from effects
    * @param dfQ {Number} degrees of freedom in computing cochrane's Q
-   * @param {Function} inversion a function applied to treatment effects that must be changed in direction (e.g. if an effect is for A vs. B, inversion gives B vs. A)
    */
   constructor(aggregatedTreatmentEffects,
               aggregatedStandardErrors,
               orderedTreatments,
               studyLevelEffects,
-              transformation,
+              comparison,
               q,
-              dfQ,
-              inversion = (x) => -x) {
+              dfQ) {
     this._treatmentEffects = aggregatedTreatmentEffects;
     this._standardErrors = aggregatedStandardErrors;
     this._treatments = orderedTreatments;
     this._studyLevelEffects = studyLevelEffects;
-    this._transformation = transformation;
-    this._inversion = inversion;
+    this._comparisonStatistic = comparison;
+    // since we're operating on standardized values in all existing cases, the inversion function just flips across 0
+    this._inversion = (x) => -x;
     this._q = q;
     this._dfQ = dfQ
   }
@@ -178,7 +188,7 @@ class NetworkMetaAnalysis {
       throw new Error('Requesting NMA for non-present treatment');
     }
 
-    return this._transformation(this._treatmentEffects.get(i, j));
+    return this._comparisonStatistic.transform(this._treatmentEffects.get(i, j));
   }
 
   /**
@@ -196,7 +206,7 @@ class NetworkMetaAnalysis {
     }
 
     return _computeInferentialStatistics(this._treatmentEffects.get(i, j), this._standardErrors.get(i, j),
-      this._transformation, width, nullEffect);
+      this._comparisonStatistic.transform, width, nullEffect);
   }
 
   /**
@@ -219,7 +229,7 @@ class NetworkMetaAnalysis {
         const te = this._treatmentEffects.get(i, j);
         const se = this._standardErrors.get(i, j);
         const weight = te === 0 ? .5 : te > 0 ? 1 : 0;
-        const { p: pValue } = _computeInferentialStatistics(te, se, this._transformation);
+        const { p: pValue } = _computeInferentialStatistics(te, se, this._comparisonStatistic.transform);
         // convert a two sided p-value to a one-sided
         if (smallerBetter) {
           ps.push((weight * pValue / 2) + (1 - weight) * (1 - pValue / 2));
@@ -246,7 +256,6 @@ class NetworkMetaAnalysis {
       .filter(({treatment2}) => treatment2 === forTreatment)
       .map((e)  => {
         const eCopy = { ...e };
-        // since we're operating on standardized values, the inversion function is appropriately applied here
         eCopy.effect = this._inversion(e.effect);
         const trt1 = eCopy.treatment1;
         eCopy.treatment1 = eCopy.treatment2;
@@ -268,8 +277,8 @@ class NetworkMetaAnalysis {
    */
   computeStudyLevelEffects(treatment, width=.95) {
     return this._getRawStudyLevelEffects(treatment).map((e) => {
-      const inferentialStats = _computeInferentialStatistics(e.effect, e.se, this._transformation, width);
-      inferentialStats.effect = this._transformation(e.effect); // with inferentials done, we convert to orig scale
+      const inferentialStats = _computeInferentialStatistics(e.effect, e.se, this._comparisonStatistic.transform, width);
+      inferentialStats.effect = this._comparisonStatistic.transform(e.effect); // with inferentials done, we convert to orig scale
       inferentialStats.treatment1 = e.treatment1;
       inferentialStats.treatment2 = e.treatment2;
       inferentialStats.study = e.study;
@@ -292,6 +301,8 @@ class NetworkMetaAnalysis {
    *       `se`
    *   `leftFunnel` (array of [x, y] points that can be linearly interpolated)
    *   `rightFunnel` (array of [x, y] points that can be linearly interpolated)
+   *   `asymmetryP` p-value for ; undefined when test cannot be run (e.g. too few studies)
+   *   `asymmetryTest` name of the test used in assessing asymmetry; undefined when `asymmetryP` is undefined
    * or undefined, if there is no data for the treatment
    */
   computeComparisonAdjustedEffects(treatment, level=0.95) {
@@ -308,7 +319,7 @@ class NetworkMetaAnalysis {
     const rightFunnel = [];
     for (let i = 0; i < funnelPoints; i++) {
       const seIter = maxSE * (i / (funnelPoints - 1));
-      const bounds = _computeInferentialStatistics(equivalenceEffect, seIter, this._transformation, level);
+      const bounds = _computeInferentialStatistics(equivalenceEffect, seIter, this._comparisonStatistic.transform, level);
       leftFunnel.push([bounds.lower, seIter]);
       rightFunnel.push([bounds.upper, seIter]);
     }
@@ -323,14 +334,31 @@ class NetworkMetaAnalysis {
       const slCopy = {...sl};
       delete slCopy.comparisonN;
       // because we will be displaying effects with input `treatment` as the baseline, we invert the effects
-      slCopy.effect = this._transformation(this._inversion(sl.effect) - this._inversion(modeledEffect));
+      slCopy.effect = this._comparisonStatistic.transform(this._inversion(sl.effect) - this._inversion(modeledEffect));
       return slCopy;
     });
+
+    const asymmetryResults = {};
+    if (studyLevelEffects.length >= 5) {
+      // this is wrapped in a try/catch to protect from a variety of numerical issues / degenerate inputs crashing the entire call
+      try {
+        const snd = adjustedEffects.map(({ effect, se }) => effect / se);
+        const precision = adjustedEffects.map(({ se }) => 1 / se);
+        const reg = linearRegression(snd, precision);
+        asymmetryResults.asymmetryP = reg.interceptP;
+        // for now, we only support Egger, because most other test types (e.g. Harbord) are incompatible with
+        // transformed / adjusted effects that we have
+        asymmetryResults.asymmetryTest = 'Egger';
+      } catch (e) {
+        console.error(e);
+      }
+    }
 
     return ({
       effects: adjustedEffects,
       leftFunnel,
       rightFunnel,
+      ...asymmetryResults,
     });
   }
 
@@ -628,11 +656,11 @@ function _mergeComponentNMAResults(results) {
  * @param treatments {Array}
  * @param buildContrasts {Function} a function like _buildAllPairsORStatistics that generates pairs of arms implying treatment effects
  * @param parameters {Object} }an object with array attributes to be consumed by `buildContrasts`. arrays should share length for correct indexing
- * @param transformation {Function} maps effects computed in `buildContrasts` to a different space (typically one more interprettable)
+ * @param comparisonStatistic {Object} one of the `ComparisonStatistics` used for mapping between modelled and human-interpretable spaces
  * @param randomEffects {Boolean} whether or not random effects should be modeled
  * @return {NetworkMetaAnalysis}
  */
-function _generalizedNMA(studies, treatments, buildContrasts, parameters, transformation, randomEffects=false) {
+function _generalizedNMA(studies, treatments, buildContrasts, parameters, comparisonStatistic, randomEffects=false) {
   if (studies.length === 0) {
     // https://github.com/mljs/matrix/issues/113 limits the API we can provide
     throw new Error('Must have 1 or more studies to perform an NMA');
@@ -713,7 +741,7 @@ function _generalizedNMA(studies, treatments, buildContrasts, parameters, transf
   });
 
   const { treatmentEffects, standardErrors, orderedTreatments, studyLevelEffects, q, dfQ } = _mergeComponentNMAResults(componentResults);
-  return new NetworkMetaAnalysis(treatmentEffects, standardErrors, orderedTreatments, studyLevelEffects, transformation, q, dfQ);
+  return new NetworkMetaAnalysis(treatmentEffects, standardErrors, orderedTreatments, studyLevelEffects, comparisonStatistic, q, dfQ);
 }
 
 /**
@@ -730,6 +758,7 @@ function _buildAllPairsORStatistics(treatments, params, incr = .5) {
   const logOddsRatios = new Array(nPairs);
   const logStandardErrors = new Array(nPairs);
   const comparisonNs = new Array(nPairs);
+  const raw = new Array(nPairs);
   let ix = 0; // because the ix = f(i,j) arithmetic is no fun
   for (let i = 0; i < treatments.length - 1; i++) {
     for (let j = i + 1; j < treatments.length; j++) {
@@ -742,13 +771,21 @@ function _buildAllPairsORStatistics(treatments, params, incr = .5) {
       logOddsRatios[ix] = Math.log((pi / ni) / (pj / nj));
       logStandardErrors[ix] = Math.sqrt(1 / pi + 1 / ni + 1 / pj + 1 / nj);
       comparisonNs[ix] = totalCounts[i] + totalCounts[j];
+      raw[ix] = {
+        nA: totalCounts[i],
+        nB: totalCounts[j],
+        pA: positiveCounts[i],
+        pB: positiveCounts[j],
+      };
+
       ix += 1;
     }
   }
 
   return {
-    treatmentsA: treatmentsA,
-    treatmentsB: treatmentsB,
+    treatmentsA,
+    treatmentsB,
+    raw,
     effects: logOddsRatios,
     standardErrors: logStandardErrors,
     comparisonNs: comparisonNs,
@@ -803,7 +840,7 @@ function oddsRatioNMA(studies, treatments, positiveCounts, totalCounts, randomEf
   return _generalizedNMA(studies, treatments, _buildAllPairsORStatistics, {
     positiveCounts,
     totalCounts,
-  }, (x) => Math.exp(x), randomEffects);
+  }, ComparisonStatistic.OR, randomEffects);
 }
 
 /**
@@ -880,11 +917,12 @@ function meanDifferenceNMA(studies, treatments, means, standardDeviations, exper
     means,
     standardDeviations,
     ns: experimentalUnits,
-  }, (x) => x, randomEffects);
+  }, ComparisonStatistic.MD, randomEffects);
 }
 
 module.exports = {
   NetworkMetaAnalysis,
+  ComparisonStatistic,
   oddsRatioNMA: oddsRatioNMA,
   meanDifferenceNMA: meanDifferenceNMA,
 };

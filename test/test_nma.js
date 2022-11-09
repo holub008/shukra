@@ -1,6 +1,7 @@
 const assert = require('assert');
 const { NetworkMetaAnalysis, oddsRatioNMA, meanDifferenceNMA } = require('../src/nma');
 const { Matrix } = require('ml-matrix');
+const {ComparisonStatistic} = require("../src");
 
 /**
  * tests for NMA module
@@ -11,7 +12,7 @@ describe('NMA Holder Class', function () {
   const se = new Matrix([[0, 2], [2, 0]]);
   const trtLabel = ['Band-aid', 'Stitch'];
   const stubStudyLevelEffects = [];
-  const meanDiffNMA = new NetworkMetaAnalysis(trt, se, trtLabel, stubStudyLevelEffects, (x) => x, 202.3334, 23);
+  const meanDiffNMA = new NetworkMetaAnalysis(trt, se, trtLabel, stubStudyLevelEffects, ComparisonStatistic.MD, 202.3334, 23);
 
   it('should echo treatment effect', function () {
     assert.strictEqual(meanDiffNMA.getEffect('Band-aid', 'Stitch'), 5);
