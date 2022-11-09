@@ -250,7 +250,7 @@ describe('Odds Ratio FE NMA', function () {
     assert.deepStrictEqual(fis, ris);
   });
 
-  it('should compute accurate comparison adjusted', function() {
+  it('should compute accurate comparison adjusted stats', function() {
     /* checked with R code (!note, effects will differ a bit due to using indirect evidence in the adjustment calculation)
       r <- funnel(net2, order='B', studlab=T, level=.99)
       library(jsonlite)
@@ -267,7 +267,7 @@ describe('Odds Ratio FE NMA', function () {
         arrange(study, treatment1) %>%
         toJSON()
      */
-    const { effects, leftFunnel, rightFunnel } = nmaFE.computeComparisonAdjustedEffects('B');
+    const { effects, leftFunnel, rightFunnel, asymmetryP, asymmetryTest  } = nmaFE.computeComparisonAdjustedEffects('B');
     const orderedStudies = effects
       .sort((a, b) => a.treatment2 < b.treatment2 ? -1 : 1)
       .sort((a, b) => a.study < b.study ? -1 : 1);
@@ -302,6 +302,21 @@ describe('Odds Ratio FE NMA', function () {
     assert.deepStrictEqual(rightFunnel[rightFunnel.length - 1],  [2.3781726450891165, 0.44201445534146955]);
     assert.deepStrictEqual(rightFunnel[0],  [1, 0]);
   });
+
+  it('should perform correct Egger Tests', function() {
+    /* validate:
+      # close, but not equivalent, since we are using NMA effects for adjustment, not direct effects
+      funnel(net2, order='A, method.bias='egger')
+      funnel(net2, order='C, method.bias='egger')
+     */
+    const { asymmetryP, asymmetryTest  } = nmaFE.computeComparisonAdjustedEffects('A');
+    assert.deepStrictEqual(asymmetryP, 0.4483014839311841);
+    assert.deepStrictEqual(asymmetryTest, 'Egger');
+
+    const { asymmetryP: ap2, asymmetryTest: at2  } = nmaFE.computeComparisonAdjustedEffects('C');
+    assert.deepStrictEqual(ap2, 0.9673980987346369);
+    assert.deepStrictEqual(at2, 'Egger');
+  })
 });
 
 describe('Mean Difference NMA', function () {
@@ -498,6 +513,12 @@ describe('Mean Difference NMA', function () {
       upper: 0.9163635910636153,
     })
   });
+
+  it('should gracefully skip egger test (too few observations)', function () {
+    const res = nmaFE.computeComparisonAdjustedEffects(1);
+    assert.deepStrictEqual(res.asymmetryP, undefined);
+    assert.deepStrictEqual(res.asymmetryTest, undefined);
+  })
 });
 
 /*

@@ -151,7 +151,10 @@ function linearRegression(y, x) {
   // inferential tests
   const coefs = beta.to1DArray();
   const tStats = coefs.map((b, ix) => b / betaSEs[ix]);
-  const testP = tStats.map((t) => 2 * (1 - _studentTCDF(t, X.rows - X.columns - 1)));
+  const testP = tStats.map((t) => {
+    const p1 = _studentTCDF(t, X.rows - X.columns - 1);
+    return p1 > .5 ? 2 * (1 - p1) : 2 * p1;
+  });
 
   return {
     intercept: coefs[0],
