@@ -153,7 +153,7 @@ class NetworkMetaAnalysis {
    * @param {Matrix} aggregatedTreatmentEffects a square matrix with treatment effects
    * @param {Matrix} aggregatedStandardErrors a square matrix with effect standard errors
    * @param {Array} orderedTreatments the list of unique treatments corresponding to row and column indices
-   * @param {Array} studyLevelEffects an array of objects with attributes `study`, `treatment1`, `treatment2`, `effect`, `se`,  `comparisonN`, `raw`
+   * @param {Array} studyLevelEffects an array of objects with attributes `study`, `treatment1`, `treatment2`, `effect`, `se`,  `comparisonN`
    * @param {Object} comparison one of the `ComparisonStatistic`s that effects were generated for
    * @param q {Number} cochrane's Q derived from effects
    * @param dfQ {Number} degrees of freedom in computing cochrane's Q
@@ -758,7 +758,6 @@ function _buildAllPairsORStatistics(treatments, params, incr = .5) {
   const logOddsRatios = new Array(nPairs);
   const logStandardErrors = new Array(nPairs);
   const comparisonNs = new Array(nPairs);
-  const raw = new Array(nPairs);
   let ix = 0; // because the ix = f(i,j) arithmetic is no fun
   for (let i = 0; i < treatments.length - 1; i++) {
     for (let j = i + 1; j < treatments.length; j++) {
@@ -771,12 +770,6 @@ function _buildAllPairsORStatistics(treatments, params, incr = .5) {
       logOddsRatios[ix] = Math.log((pi / ni) / (pj / nj));
       logStandardErrors[ix] = Math.sqrt(1 / pi + 1 / ni + 1 / pj + 1 / nj);
       comparisonNs[ix] = totalCounts[i] + totalCounts[j];
-      raw[ix] = {
-        nA: totalCounts[i],
-        nB: totalCounts[j],
-        pA: positiveCounts[i],
-        pB: positiveCounts[j],
-      };
 
       ix += 1;
     }
@@ -785,7 +778,6 @@ function _buildAllPairsORStatistics(treatments, params, incr = .5) {
   return {
     treatmentsA,
     treatmentsB,
-    raw,
     effects: logOddsRatios,
     standardErrors: logStandardErrors,
     comparisonNs: comparisonNs,
