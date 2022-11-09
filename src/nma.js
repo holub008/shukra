@@ -267,7 +267,6 @@ class NetworkMetaAnalysis {
     return [...directionalEffects, ...invertedEffects]
   }
 
-
   /**
    * get the (direct) effects and inferential statistics from individual studies feeding into the pooled estimates
    * inferentials are built on normal approximations
