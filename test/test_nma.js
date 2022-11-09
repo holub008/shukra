@@ -1,6 +1,7 @@
 const assert = require('assert');
 const { NetworkMetaAnalysis, oddsRatioNMA, meanDifferenceNMA } = require('../src/nma');
 const { Matrix } = require('ml-matrix');
+const {ComparisonStatistic} = require("../src");
 
 /**
  * tests for NMA module
@@ -11,7 +12,7 @@ describe('NMA Holder Class', function () {
   const se = new Matrix([[0, 2], [2, 0]]);
   const trtLabel = ['Band-aid', 'Stitch'];
   const stubStudyLevelEffects = [];
-  const meanDiffNMA = new NetworkMetaAnalysis(trt, se, trtLabel, stubStudyLevelEffects);
+  const meanDiffNMA = new NetworkMetaAnalysis(trt, se, trtLabel, stubStudyLevelEffects, ComparisonStatistic.MD, 202.3334, 23);
 
   it('should echo treatment effect', function () {
     assert.strictEqual(meanDiffNMA.getEffect('Band-aid', 'Stitch'), 5);
@@ -34,6 +35,19 @@ describe('NMA Holder Class', function () {
     assert.throws(() => meanDiffNMA.getEffect("Super glue", "Stitch"));
     assert.throws(() =>
       meanDiffNMA.computeInferentialStatistics("Stitch", "Super glue", .95));
+  });
+
+  it('should report correct heterogeneity stats', function() {
+    /** checked via the following R code:
+     p2 <- pairwise(treat = list(treat1, treat2, treat3), event = list(event1, event2, event3),
+     n = list(n1, n2, n3), data = smokingcessation, sm = "OR", addincr=TRUE)
+     net2 <- netmeta(TE, seTE, treat1, treat2, studlab, data = p2, comb.fixed = TRUE, comb.random = FALSE)
+     c(net2$I2, net2$lower.I2, net2$upper.I2)
+     */
+    const i2Stats = meanDiffNMA.computeISquared()
+    assert.ok(i2Stats.i2 > 0.886 && i2Stats.i2 < 0.887);
+    assert.ok(i2Stats.lower > 0.843 && i2Stats.lower < 0.844);
+    assert.ok(i2Stats.upper > 0.917 && i2Stats.upper < 0.918);
   });
 });
 
@@ -136,8 +150,8 @@ describe('Odds Ratio FE NMA', function () {
 
   it('should produce reasonable random effects effect size estimates', function () {
     /** checked via the following R code:
-     net2 <- netmeta(TE, seTE, treat1, treat2, studlab, data = p2, comb.fixed = FALSE, comb.random = TRUE)
-     summary(net2)
+     net1 <- netmeta(TE, seTE, treat1, treat2, studlab, data = p2, comb.fixed = FALSE, comb.random = TRUE)
+     summary(net1)
      */
     const ab = nmaRE.getEffect("A", "B");
     const ba = nmaRE.getEffect("B", "A");
@@ -224,6 +238,85 @@ describe('Odds Ratio FE NMA', function () {
       study: 1
     });
   });
+
+  it('should produce valid heterogeneity statistics', function () {
+    const ris = nmaRE.computeISquared()
+    assert.deepStrictEqual(ris, {
+      i2: 0.8863262063832255,
+      lower: 0.8437926735418156,
+      upper: 0.9172783271552367,
+    });
+    const fis = nmaFE.computeISquared();
+    assert.deepStrictEqual(fis, ris);
+  });
+
+  it('should compute accurate comparison adjusted stats', function() {
+    /* checked with R code (!note, effects will differ a bit due to using indirect evidence in the adjustment calculation)
+      r <- funnel(net2, order='B', studlab=T, level=.99)
+      library(jsonlite)
+      r %>%
+        mutate(
+          study = studlab,
+          treatment1 = treat2,
+          treatment2 = treat1,
+          effect = exp(TE.adj),
+          se = seTE,
+          study = as.integer(study)
+        ) %>%
+        select(study, treatment1, treatment2, effect, se) %>%
+        arrange(study, treatment1) %>%
+        toJSON()
+     */
+    const { effects, leftFunnel, rightFunnel, asymmetryP, asymmetryTest  } = nmaFE.computeComparisonAdjustedEffects('B');
+    const orderedStudies = effects
+      .sort((a, b) => a.treatment2 < b.treatment2 ? -1 : 1)
+      .sort((a, b) => a.study < b.study ? -1 : 1);
+    // this has been changed from netmeta: https://github.com/guido-s/netmeta/issues/11
+    assert.deepStrictEqual(orderedStudies, [
+      {"study":2,"treatment1":"B","treatment2":"C","effect":0.6395259758462293,"se":0.44201445534146955},
+      {"study":2,"treatment1":"B","treatment2":"D","effect":0.7422349294922779,"se":0.3778052136324726},
+      {"study":10,"treatment1":"B","treatment2":"A","effect":1.2422745360612997,"se":0.16942586755039812},
+      {"study":11,"treatment1":"B","treatment2":"A","effect":0.8283706607044433,"se":0.32255160585540343},
+      {"study":16,"treatment1":"B","treatment2":"A","effect":0.641086661173091,"se":0.4310551417352239},
+      {"study":21,"treatment1":"B","treatment2":"C","effect":0.5531577328382871,"se":0.4238496075960444},
+      {"study":22,"treatment1":"B","treatment2":"D","effect":1.6375914850930329,"se":0.43747056012961766}
+    ]);
+
+    assert.deepStrictEqual(leftFunnel.length, 500);
+    // strictly decreasing in effect size
+    assert.deepStrictEqual(leftFunnel, leftFunnel.sort((a, b) => a[0] > b[0] ? -1 : 1))
+    // strictly increasing in SE
+    assert.deepStrictEqual(leftFunnel, leftFunnel.sort((a, b) => a[1] > b[1] ? 1 : -1))
+    // exp(ci(log(1), .44201445534146955, .95)$lower)
+    // where .442014 is our max SE
+    assert.deepStrictEqual(leftFunnel[leftFunnel.length - 1],  [0.4204909185483156, 0.44201445534146955]);
+    assert.deepStrictEqual(leftFunnel[0],  [1, 0]);
+
+    assert.deepStrictEqual(rightFunnel.length, 500);
+    // strictly decreasing in effect size
+    assert.deepStrictEqual(rightFunnel, rightFunnel.sort((a, b) => a[0] > b[0] ? -1 : 1))
+    // strictly increasing in SE
+    assert.deepStrictEqual(rightFunnel, rightFunnel.sort((a, b) => a[1] > b[1] ? 1 : -1))
+    // exp(ci(log(1), .44201445534146955, .95)$upper)
+    // where .442014 is our max SE
+    assert.deepStrictEqual(rightFunnel[rightFunnel.length - 1],  [2.3781726450891165, 0.44201445534146955]);
+    assert.deepStrictEqual(rightFunnel[0],  [1, 0]);
+  });
+
+  it('should perform correct Egger Tests', function() {
+    /* validate:
+      # close, but not equivalent, since we are using NMA effects for adjustment, not direct effects
+      funnel(net2, order='A, method.bias='egger')
+      funnel(net2, order='C, method.bias='egger')
+     */
+    const { asymmetryP, asymmetryTest  } = nmaFE.computeComparisonAdjustedEffects('A');
+    assert.deepStrictEqual(asymmetryP, 0.4483014839311841);
+    assert.deepStrictEqual(asymmetryTest, 'Egger');
+
+    const { asymmetryP: ap2, asymmetryTest: at2  } = nmaFE.computeComparisonAdjustedEffects('C');
+    assert.deepStrictEqual(ap2, 0.9673980987346369);
+    assert.deepStrictEqual(at2, 'Egger');
+  })
 });
 
 describe('Mean Difference NMA', function () {
@@ -410,6 +503,21 @@ describe('Mean Difference NMA', function () {
         pScore: 0.0005,
       },
     ]);
+  });
+
+  /** test by checking I2, lower.I2, upper.I2 properties of the model */
+  it('should produce valid heterogeneity statistics', function() {
+    assert.deepStrictEqual(nmaFE.computeISquared(), {
+      i2: 0.19595891881666125,
+      lower: 0,
+      upper: 0.9163635910636153,
+    })
+  });
+
+  it('should gracefully skip egger test (too few observations)', function () {
+    const res = nmaFE.computeComparisonAdjustedEffects(1);
+    assert.deepStrictEqual(res.asymmetryP, undefined);
+    assert.deepStrictEqual(res.asymmetryTest, undefined);
   })
 });
 
