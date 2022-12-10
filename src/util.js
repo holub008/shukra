@@ -1,7 +1,6 @@
 const gaussian = require('gaussian');
 const { Matrix, inverse, pseudoInverse } = require('ml-matrix');
 
-
 function sum(arr) {
   return arr.reduce((a, b) => a + b, 0);
 }
@@ -174,4 +173,5 @@ module.exports = {
   preconditionAllPositive,
   preconditionRange,
   linearRegression,
+  STD_NORMAL,
 };

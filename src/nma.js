@@ -1,9 +1,7 @@
-const {Matrix, inverse, pseudoInverse} = require('ml-matrix');
-const gaussian = require('gaussian');
-const {getConnectedComponents} = require('./graph');
-const {linearRegression} = require("./util");
+const { Matrix, inverse, pseudoInverse } = require('ml-matrix');
+const { getConnectedComponents } = require('./graph');
+const { linearRegression, STD_NORMAL } = require("./util");
 
-const STD_NORMAL = gaussian(0, 1);
 
 function invertNChoose2(x) {
   return (1 + Math.sqrt(8 * x + 1)) / 2;

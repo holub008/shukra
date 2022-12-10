@@ -1,9 +1,6 @@
-const gaussian = require('gaussian');
 const { Matrix, inverse } = require('ml-matrix');
 const { sum, preconditionNotNull, preconditionLengthEquality, preconditionAllPositive, preconditionRange,
-  weightedQuantile, weightedMean, logistic } = require('./util');
-
-const STD_NORMAL = gaussian(0, 1);
+  weightedQuantile, weightedMean, logistic, STD_NORMAL } = require('./util');
 
 function crossProduct(A, B) {
   return A.transpose().mmul(B);
