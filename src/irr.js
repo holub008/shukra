@@ -22,7 +22,7 @@ function preconditionStructure(items, categories) {
   });
 
   if (uniqueReviewers.size !== 2) {
-    throw new Error(`Found ${uniqueReviewers.size} reviewers; expected 2`);
+    throw new Error(`Found ${uniqueReviewers.size} raters; expected 2`);
   }
 
   const reviewerMapping = {};
@@ -45,6 +45,13 @@ function preconditionStructure(items, categories) {
   };
 }
 
+/**
+ * @param items Array of objects with attributes `raters` and `ratings`
+ * @param categories Number the number of categories of rating to be considered. must be less than or equal to the number
+ * in the items
+ * @param width Number 0-1 for width of confidence interval
+ * @returns {{lower: number, upper: number, kappa: number}}
+ */
 function cohensKappa(items, categories, width=0.95) {
   const { categoryMapping, reviewerMapping } = preconditionStructure(items, categories);
 
@@ -66,7 +73,6 @@ function cohensKappa(items, categories, width=0.95) {
 
   const randomAgreement = Math.pow(items.length, -2) * reviewerProductSum;
   const agreement = agreements / items.length;
-  console.log(agreement, randomAgreement);
 
   const kappa = (agreement - randomAgreement) / (1 - randomAgreement);
   const se = Math.sqrt((agreement * (1 - agreement)) / (items.length * Math.pow(1 - randomAgreement, 2)));
