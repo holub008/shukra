@@ -729,7 +729,6 @@ describe('NMA on a near-singular effect SE adjustment', () => {
 
   it('should produce valid effect estimates for random effects', () => {
     const nma = meanDifferenceNMA(studies, interventions, means, sds, ns, true);
-    console.log(nma)
 
     assert.deepStrictEqual(nma.getEffect(253203, 253197), 44.37721658860796)
     assert.deepStrictEqual(nma.computeInferentialStatistics(253203, 253197, 0.95), {
