@@ -529,7 +529,8 @@ function _computeNewSEs(r) {
   const R = Matrix.diagonal(cachedProduct.diag()).subtract(cachedProduct);
   const BtB = Bt.mmul(B);
   const Lt = BtB.mmul(R).mmul(BtB).divide(-2 * Math.pow(nStudyArms, 2));
-  const L = pseudoInverse(Lt);
+  // the epsilon selected here (much smaller than default) was found to better match netmeta/R behavior on near-singular matrices
+  const L = pseudoInverse(Lt, .000001);
 
   const W = Matrix.diagonal(L.diagonal()).subtract(L);
 
@@ -572,16 +573,7 @@ function _computePrerequisites(effectStandardErrors, treatmentsA, treatmentsB, s
       .filter(tup => tup[0])
       .map(tup => tup[1]);
     const pairWeights = pairIndices.map(ix => 1 / perPairWeights[ix]);
-    const correctedSEs = _computeNewSEs(pairWeights).map((w, ix) => {
-      if (w >= 0) {
-        return Math.sqrt(w);
-      } else {
-        // this should only trigger in the event of numerical issues (bad inverse calculation in computeNewSEs)- fall back
-        // to weighting uncorrected for the number of contrasts. this will result in smaller than correct adjusted SEs for multiarm
-        // studies. but, it won't crash the entire calculation
-        return Math.sqrt(1 / perPairWeights[ix]);
-      }
-    });
+    const correctedSEs = _computeNewSEs(pairWeights).map((w) => Math.sqrt(w));
     pairIndices.forEach((originalIx, studyIx) => perPairWeights[originalIx] = correctedSEs[studyIx]);
   });
 

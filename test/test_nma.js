@@ -693,9 +693,10 @@ describe('NMA for networks with disconnected components', function() {
 });
 
 describe('NMA on a near-singular effect SE adjustment', () => {
-  // our approach when effect adjustments result in numerical issues (inverse calcuation) is to use unweighted SEs
-  // this results in smaller than correct SEs, but in practice inconsequential divergence from what netmeta produces
-  // ideally, we'd use a matrix library that better handles near-singular matrices
+  // this data produces a nearly-singular (condition number = 2M) matrix L in _computeNewSEs
+  // which we then invert. this test makes sure we are handling that situation reasonably, by zeroing out effectively
+  // 0 values that numerically are not so. this is done with the threshold parameter to pseudoinverse
+  // this matches what R/netmeta produces, which seems more consistent with effect sizes
   /* validation R code:
         data <- data.frame(
        mean = c(3, -20, 20, -4.8, -50.6, -20.7, -57.2, 0.9, -12.1, 2.7, -72.4, -5.1, -58.9, 2.9, -56.3, 9, -14.9, 1.2, -45.9, 8.3, -61, 0.8, -59.4, -18.4, 7.1, -57.4, -0.1, -62, -1, -55.8, 4.4, -54.35, 3.17, -56, -20.3, -48.2, -2.3, -57.1, 6.3, -65.7, 2.6, -59.5, 0.9),
@@ -718,12 +719,23 @@ describe('NMA on a near-singular effect SE adjustment', () => {
   it('should produce valid effect estimates for fixed effects', () => {
     const nma = meanDifferenceNMA(studies, interventions, means, sds, ns, false);
 
-    // note, this is a small divergence from netmeta, where the effect is actually 45.0632
-    assert.deepStrictEqual(nma.getEffect(253203, 253197), 44.99133237219801)
+    assert.deepStrictEqual(nma.getEffect(253203, 253197), 45.06322178943843)
     assert.deepStrictEqual(nma.computeInferentialStatistics(253203, 253197, 0.95), {
       p: 0,
-      lower: 42.82371708200565, // netmeta: 42.8475
-      upper: 47.15894766239037, // netmeta: 47.2789
+      lower: 42.84752174111436,
+      upper: 47.278921837762496,
+    });
+  });
+
+  it('should produce valid effect estimates for random effects', () => {
+    const nma = meanDifferenceNMA(studies, interventions, means, sds, ns, true);
+    console.log(nma)
+
+    assert.deepStrictEqual(nma.getEffect(253203, 253197), 44.37721658860796)
+    assert.deepStrictEqual(nma.computeInferentialStatistics(253203, 253197, 0.95), {
+      p: 0,
+      lower: 39.228611794776306,
+      upper: 49.52582138243961,
     });
   });
 });
