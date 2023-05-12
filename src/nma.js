@@ -572,7 +572,16 @@ function _computePrerequisites(effectStandardErrors, treatmentsA, treatmentsB, s
       .filter(tup => tup[0])
       .map(tup => tup[1]);
     const pairWeights = pairIndices.map(ix => 1 / perPairWeights[ix]);
-    const correctedSEs = _computeNewSEs(pairWeights).map(w => Math.sqrt(w));
+    const correctedSEs = _computeNewSEs(pairWeights).map((w, ix) => {
+      if (w >= 0) {
+        return Math.sqrt(w);
+      } else {
+        // this should only trigger in the event of numerical issues (bad inverse calculation in computeNewSEs)- fall back
+        // to weighting uncorrected for the number of contrasts. this will result in smaller than correct adjusted SEs for multiarm
+        // studies. but, it won't crash the entire calculation
+        return Math.sqrt(1 / perPairWeights[ix]);
+      }
+    });
     pairIndices.forEach((originalIx, studyIx) => perPairWeights[originalIx] = correctedSEs[studyIx]);
   });
 
